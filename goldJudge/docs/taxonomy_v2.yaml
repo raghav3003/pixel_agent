@@ -1,0 +1,132 @@
+# Machine-readable companion to taxonomy_v2.md. Keep the two in sync.
+version: "v2.1-draft-2026-09-23"   # v2.1: G1+G2 merged, G3-G5 renumbered to G2-G4 (22 leaves)
+question_order: [E, P, G, R]   # ask in this order at the root step
+families:
+  P:
+    name: Perception
+    question: "Did the agent misread what was visible in the observation?"
+  G:
+    name: Grounding & interaction
+    question: "Did the agent's reasoning name the CORRECT target/effect while the executed action missed it? (G applies only when the reasoning is right and the execution is wrong.)"
+  R:
+    name: Reasoning, planning & control
+    question: "Did the agent decide on the wrong goal, plan, action, or stopping point?"
+  E:
+    name: Environment, harness & benchmark
+    question: "Did something outside the agent (environment, harness, evaluator) cause the failure?"
+
+leaves:
+  P1: {name: Visual hallucination, family: P,
+       definition: "Claims to see an element, text, or state that is not in the screenshot."}
+  P2: {name: Misrecognition, family: P,
+       definition: "Misreads something that is visible: OCR error, wrong icon-to-function mapping, shape/colour confusion, wrong widget type (e.g. label vs field)."}
+  P3: {name: Observation omission, family: P,
+       definition: "Fails to notice task-relevant visible information: error banners, dialogs, result lists, a changed value, an already-open tab."}
+  P4: {name: Feedback misinterpretation, family: P,
+       definition: "Sees the screen but misjudges the outcome of the previous action or the current UI state (thinks a click succeeded, a dialog closed, a value changed)."}
+  G1: {name: Mis-grounded target, family: G,
+       definition: "Intent names the right element T; the executed action does not land on T: a near miss just outside it (boundary, compact widget, zoom/scale drift) or a different element (label instead of field, neighbour in a list, wrong side of a landmark, similar-looking control)."}
+  G2: {name: Inaccessible target, family: G,
+       definition: "Acts on an element that is off-screen, occluded, disabled, or behind an overlay instead of first scrolling / closing / enabling."}
+  G3: {name: Interaction mechanics, family: G,
+       definition: "Right target, wrong primitive or sequencing: single vs double click, typing without focus, wrong hotkey, drag/select failure, Enter never pressed, acting before the UI settled when a wait was available."}
+  G4: {name: Distraction / misdirection, family: G,
+       definition: "Redirected by ads, pop-ups, cookie banners, decoys, or suggestions unrelated to the goal."}
+  R1: {name: Task misunderstanding, family: R,
+       definition: "Misreads the instruction, drops or violates an explicit constraint, invents a goal never asked for, or picks an evaluator-rejected reading of an ambiguous task."}
+  R2: {name: Plan / decomposition error, family: R,
+       definition: "Wrong sub-goal order, missing prerequisite step, or an approach that cannot reach the goal (impossible action, wrong app or feature)."}
+  R3: {name: Affordance / knowledge gap, family: R,
+       definition: "Understands the goal but does not know how the software does it: never tries the menu, shortcut, sidebar tab, context menu, or dialog the task needs."}
+  R4: {name: Action-intent mismatch, family: R,
+       definition: "The emitted action does not implement the stated intent: wrong parameters, wrong text typed, wrong argument, malformed or non-existent action."}
+  R5: {name: False belief / context loss, family: R,
+       definition: "Asserts something false about task state or history that is not a direct misreading of the current screen: forgets progress, hallucinates a past result, loses clipboard/file/sub-goal state across steps or apps."}
+  R6: {name: Progress misjudgment, family: R,
+       definition: "Declares success (DONE) or gives up (FAIL) when the task is not complete, or fails to verify a task-critical property it could have checked."}
+  R7: {name: Failed recovery / looping, family: R,
+       definition: "Detects (or should detect) that an action is not working but repeats it or applies an ineffective fix without changing approach."}
+  R8: {name: Inefficient strategy, family: R,
+       definition: "A valid but wasteful approach that exhausts the step budget or time (manual scrolling instead of Find, one-by-one edits instead of a bulk action)."}
+  R9: {name: Infeasibility handling, family: R,
+       definition: "Fails to recognise that the task is impossible and keeps acting, or wrongly declares a feasible task infeasible."}
+  E1: {name: Environment / initialization fault, family: E,
+       definition: "Required app or state never came up, VM misconfigured, app crashed or hung independent of the agent."}
+  E2: {name: Timing / race, family: E,
+       definition: "The harness fired the next action before the UI finished updating and the agent had no reasonable way to wait; stale-screen actions. If the agent could have waited, use G3."}
+  E3: {name: Harness / tool fault, family: E,
+       definition: "Action translation or execution bug (coordinate scaling, dropped keystrokes), tool/API failure, or a step/resource limit hit for reasons outside the agent's control."}
+  E4: {name: External blocker, family: E,
+       definition: "CAPTCHA, network failure, site changed since the task was written, login wall."}
+  E5: {name: Evaluator / task artifact, family: E,
+       definition: "The agent's end state appears to satisfy the task but the evaluator rejects it, or the task spec / gold reference is broken or incomplete."}
+
+secondary_relations: [co-occurring, downstream, independent]
+
+decision_rules:
+  - {between: [P1, P2], rule: "P1 if the thing does not exist on screen at all; P2 if it exists and was misread."}
+  - {between: [P3, P4], rule: "P3 if the information was never mentioned; P4 if it was seen but its meaning/outcome was misjudged."}
+  - {between: [P4, R5], rule: "P4 if the false belief is about the current screen / last action; R5 if about history or state not visible now."}
+  - {between: [G, "P/R"], rule: "Any G leaf requires that the reasoning names the correct target or effect and only the execution misses it. If the reasoning itself names the wrong element or wrong approach, use P2 (element misread from the screen) or an R leaf (wrong plan/goal/target choice) — never G. Decided 2026-09-23."}
+  - {between: [G3, R4], rule: "G3 if the intended effect was right but the mechanics failed; R4 if the emitted action contradicts the stated intent."}
+  - {between: [G3, E2], rule: "E2 only when the agent could not have waited; otherwise G3."}
+  - {between: [R1, R2], rule: "R1 if the goal itself was wrong; R2 if the goal was right but the route cannot work."}
+  - {between: [R2, R3], rule: "R3 if the plan is wrong because a hidden affordance was never considered; R2 otherwise."}
+  - {between: [R6, R7], rule: "R6 for stopping too early / not verifying; R7 for continuing without adapting."}
+  - {between: [R7, R8], rule: "R7 when the repeated action is failing; R8 when actions work but are wasteful."}
+  - {between: [R9, E5], rule: "R9 when the task is designed infeasible; E5 when a feasible task is mis-scored."}
+  - {between: [any, E], rule: "E* only with screenshot/log evidence the fault was outside the agent; the burden of proof is on E."}
+
+mappings:
+  cuadebug:   # CUADebug subtype -> v2 leaf (list = ambiguous; first is default)
+    P1: [P1]
+    P2: [P2]
+    P3: [P2]
+    P4: [P3]
+    P5: [P4]
+    G1: [G1]   # CUADebug used G1 for any wrong-target click; under v2 those with a wrong target *in the reasoning* are legitimately P2/R — expect systematic disagreement here
+    G2: [G2]
+    G3: [G3]
+    G4: [G4]
+    R1: [R1]
+    R2: [R2]
+    R3: [R2, R3]
+    R4: [R8]
+    R5: [R4]
+    R6: [R4]
+    R7: [R4]
+    R8: [R5]
+    R9: [R5]
+    R10: [R6]
+    R11: [P4]
+    R12: [R7]
+    R13: [R5]
+    S1: [E1]
+    S2: [E2]
+    S3: [E1, E4]
+    S4: [E3, R8]
+    S5: [E3]
+    S6: [E1]
+    S7: [E5]
+    IF1: []
+    IF2: [R9]
+    O1: [R9]
+    "Infeasible Task": [R9]
+  lab16:
+    "Click Region Error": [G1]
+    "Visual Confusion (Primitive Reliance)": [P2]
+    "Text Matching Bias": [P2, G1]
+    "Resolution/Scale Brittleness": [G1]
+    "Fine-Grained Manipulation Failure": [G1, G3]
+    "Software Commonsense (Icon Recognition) Failure": [P2]
+    "Action Looping (Repetition)": [R7]
+    "Location Hallucination": [G1]
+    "Spatial Reasoning Error": [G1]
+    "Goal Hallucination": [R1]
+    "Reasoning Drift": [R5, P1]
+    "Long-Horizon Memory Failure": [R5]
+    "Instruction Ambiguity Failure": [R1]
+    "Refusal/Infeasibility Error": [R9]
+    "Hidden Operation Blindness": [R3]
+    "Cross-Application Context Loss": [R5]
+    "evaluator_mismatch": [E5]

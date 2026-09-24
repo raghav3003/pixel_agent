@@ -1,0 +1,12 @@
+# never commit trajectory data or screenshots
+data/**/*.png
+data/**/*.jpg
+data/**/*.mp4
+data/**/*.zip
+data/raw/
+# judge outputs can be large; keep only summaries by default
+data/judge/**/*.jsonl
+__pycache__/
+*.egg-info/
+.pytest_cache/
+config/*.env
