@@ -70,3 +70,10 @@ goldJudge/
 2. `python scripts/build_gold_index.py` — per task: candidate gold trajectories (G1/G2/G3).
 3. `python scripts/run_judge.py --cond G0|G1|G2|G3 --judge <model>` — versioned outputs.
 4. `python scripts/score_judge.py` — root-step exact/±2, family/leaf accuracy, joint.
+
+## Subgoal track (2026-10-30)
+
+Whole-trajectory gold did not improve the judge, so a second track extracts replayable text
+action logs (`src/goldjudge/actions.py`, `scripts/extract_actions.py`) and localizes errors via
+required subgoals (`src/goldjudge/subgoals/`, `scripts/subgoals.py`, `scripts/score_subgoals.py`).
+Method, safeguards against subjective subgoals, and run commands: `docs/subgoals.md`.

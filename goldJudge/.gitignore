@@ -10,3 +10,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 config/*.env
+# action logs and subgoal-pipeline outputs are regenerable; keep only coverage/metrics CSVs
+data/actions/**/*.json
+data/subgoals/**/*.json
+data/subgoals/**/*.jsonl
