@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Cost and harness stats per (judge_version, condition) from logged token usage.
 
-Prices are $ per million tokens (base input / output); cache writes are billed at 1.25x
-input and cache reads at 0.1x input.
+Prices are $ per million tokens (base input / output). Anthropic: cache writes billed at 1.25x
+input, cache reads at 0.1x. OpenAI-compatible (incl. vLLM): cached prompt tokens at 0.1x.
 
 Usage:
   python scripts/cost_report.py --price-in 1 --price-out 5 haiku45-h50-fixed-v0.3 haiku45-h50-od-v0.3
@@ -32,8 +32,12 @@ def main() -> None:
         r = json.loads(line)
         u, a = r["usage"], agg[r["condition"]]
         a["n"] += 1
-        a["usd"] += (u["input_tokens"] * pin + u["cache_creation_input_tokens"] * pin * 1.25
-                     + u["cache_read_input_tokens"] * pin * 0.1 + u["completion_tokens"] * pout) / 1e6
+        if "input_tokens" in u:  # Anthropic usage
+          a["usd"] += (u["input_tokens"] * pin + u["cache_creation_input_tokens"] * pin * 1.25
+                       + u["cache_read_input_tokens"] * pin * 0.1 + u["completion_tokens"] * pout) / 1e6
+        else:  # OpenAI-compatible usage: prompt_tokens includes cached_tokens (billed at 0.1x)
+          cached = u.get("cached_tokens", 0)
+          a["usd"] += ((u["prompt_tokens"] - cached) * pin + cached * pin * 0.1 + u["completion_tokens"] * pout) / 1e6
         a["turns"] += r.get("n_turns", 1)
         reqs = r.get("screenshot_requests") or []
         a["extra_imgs"] += sum(len(q["granted"]) for q in reqs)

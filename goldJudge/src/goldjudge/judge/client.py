@@ -60,6 +60,10 @@ class JudgeClientConfig:
   # Sonnet 5); "adaptive" / "disabled" set it explicitly. Thinking tokens count toward max_tokens.
   thinking: str = "default"
   effort: str | None = None  # output_config.effort; not supported on Haiku 4.5
+  # OpenAI reasoning models (e.g. gpt-6-luna) only. When set, requests send reasoning_effort and
+  # max_completion_tokens and omit temperature; None keeps the plain vLLM-style request.
+  # gpt-6-luna accepts function calling on Chat Completions only with "none".
+  reasoning_effort: str | None = None
   extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -79,24 +83,89 @@ class _OpenAIBackend:
     self.cfg = cfg
     self._client = OpenAI(base_url=cfg.base_url, api_key=cfg.api_key, timeout=cfg.timeout_s, max_retries=0)
 
+  def _kwargs(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    if self.cfg.reasoning_effort:  # OpenAI reasoning model: no temperature, completion-token cap
+      return dict(model=self.cfg.model, reasoning_effort=self.cfg.reasoning_effort,
+                  max_completion_tokens=self.cfg.max_tokens, messages=messages)
+    return dict(model=self.cfg.model, temperature=self.cfg.temperature, max_tokens=self.cfg.max_tokens, messages=messages)
+
+  def _use_responses(self) -> bool:
+    # gpt-6-luna rejects function tools with reasoning on /v1/chat/completions, so every reasoning-on
+    # request (both harnesses) goes through /v1/responses: fixed and on-demand share one API surface.
+    return bool(self.cfg.reasoning_effort) and self.cfg.reasoning_effort != "none"
+
+  def _responses_kwargs(self, system: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+    # Stateless (store=False): reasoning items come back encrypted and are passed back verbatim so
+    # the model keeps its reasoning across tool turns.
+    return dict(model=self.cfg.model, instructions=system, input=items, reasoning={"effort": self.cfg.reasoning_effort},
+                max_output_tokens=self.cfg.max_tokens, store=False, include=["reasoning.encrypted_content"])
+
   def chat(self, system: str, user_content: list[dict[str, Any]]) -> JudgeResponse:
     t0 = time.time()
+    if self._use_responses():
+      resp = self._client.responses.create(
+        **self._responses_kwargs(system, [{"role": "user", "content": openai_parts_to_responses(user_content)}]))
+      return JudgeResponse(text=resp.output_text or "", usage=self._usage_responses([resp]), latency_s=time.time() - t0,
+                           model=resp.model or self.cfg.model)
     resp = self._client.chat.completions.create(
-      model=self.cfg.model,
-      temperature=self.cfg.temperature,
-      max_tokens=self.cfg.max_tokens,
-      messages=[{"role": "system", "content": system}, {"role": "user", "content": user_content}],
-    )
+      **self._kwargs([{"role": "system", "content": system}, {"role": "user", "content": user_content}]))
     text = resp.choices[0].message.content or ""
     return JudgeResponse(text=text, usage=self._usage([resp]), latency_s=time.time() - t0, model=resp.model or self.cfg.model)
 
   @staticmethod
+  def _usage_responses(resps: list[Any]) -> dict[str, Any]:
+    tot = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0, "reasoning_tokens": 0}
+    for r in resps:
+      if r.usage:
+        tot["prompt_tokens"] += r.usage.input_tokens or 0
+        tot["completion_tokens"] += r.usage.output_tokens or 0  # includes reasoning tokens
+        itd, otd = getattr(r.usage, "input_tokens_details", None), getattr(r.usage, "output_tokens_details", None)
+        tot["cached_tokens"] += (getattr(itd, "cached_tokens", 0) or 0) if itd else 0
+        tot["reasoning_tokens"] += (getattr(otd, "reasoning_tokens", 0) or 0) if otd else 0
+    last = resps[-1]
+    inc = getattr(last, "incomplete_details", None)
+    truncated = last.status == "incomplete" and getattr(inc, "reason", None) == "max_output_tokens"
+    tot["stop_reason"] = "max_tokens" if truncated else ("stop" if last.status == "completed" else last.status)
+    return tot
+
+  @staticmethod
+  def _tool_results(run_tool: Callable[[str, dict[str, Any]], tuple[list[dict[str, Any]], bool]],
+                    calls: list[tuple[str, str, str]]) -> tuple[list[tuple[str, str]], list[dict[str, Any]]]:
+    """Run ``(call_id, name, arguments_json)`` tool calls.
+
+    Returns the text result per call id and the screenshots (each with its caption, as OpenAI
+    chat parts) for one follow-up user message — tool results carry text only.
+    """
+    texts: list[tuple[str, str]] = []
+    follow: list[dict[str, Any]] = []
+    for cid, name, arguments in calls:
+      try:
+        blocks, _ = run_tool(name, json.loads(arguments or "{}"))
+      except json.JSONDecodeError:
+        blocks = [{"type": "text", "text": "arguments must be a JSON object"}]
+      parts = anthropic_blocks_to_openai(blocks)
+      notes: list[str] = []
+      for i, p in enumerate(parts):
+        nxt_is_image = i + 1 < len(parts) and parts[i + 1]["type"] == "image_url"
+        if p["type"] == "image_url" or nxt_is_image:
+          follow.append(p)
+        else:
+          notes.append(p["text"])
+      n_img = sum(p["type"] == "image_url" for p in parts)
+      shown = f"{n_img} screenshot(s) follow in the next message. " if n_img else ""
+      texts.append((cid, shown + " ".join(notes)))
+    return texts, follow
+
+  @staticmethod
   def _usage(resps: list[Any]) -> dict[str, Any]:
-    tot = {"prompt_tokens": 0, "completion_tokens": 0}
+    tot = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0, "reasoning_tokens": 0}
     for r in resps:
       if r.usage:
         tot["prompt_tokens"] += r.usage.prompt_tokens or 0
         tot["completion_tokens"] += r.usage.completion_tokens or 0
+        ptd, ctd = getattr(r.usage, "prompt_tokens_details", None), getattr(r.usage, "completion_tokens_details", None)
+        tot["cached_tokens"] += (getattr(ptd, "cached_tokens", 0) or 0) if ptd else 0
+        tot["reasoning_tokens"] += (getattr(ctd, "reasoning_tokens", 0) or 0) if ctd else 0
     finish = resps[-1].choices[0].finish_reason
     tot["stop_reason"] = "max_tokens" if finish == "length" else finish  # same vocabulary as the Anthropic backend
     return tot
@@ -115,16 +184,17 @@ class _OpenAIBackend:
 
     Tool messages carry text only, so the tool's text goes in the ``tool`` message and its
     screenshots follow in one ``user`` message. On the last allowed turn tools are not offered,
-    so the model must answer.
+    so the model must answer. Reasoning-on requests use the Responses API (see ``_use_responses``).
     """
+    if self._use_responses():
+      return self._responses_interactive(system, user_content, tools, run_tool, max_turns=max_turns, retry=retry)
     t0 = time.time()
     oa_tools = [{"type": "function", "function": {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]}}
                 for t in tools]
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}, {"role": "user", "content": user_content}]
     resps: list[Any] = []
     for turn in range(max_turns):
-      kwargs: dict[str, Any] = dict(model=self.cfg.model, temperature=self.cfg.temperature, max_tokens=self.cfg.max_tokens,
-                                    messages=list(messages))
+      kwargs = self._kwargs(list(messages))
       if turn < max_turns - 1:
         kwargs["tools"] = oa_tools
         kwargs["tool_choice"] = "auto"
@@ -136,30 +206,71 @@ class _OpenAIBackend:
         break
       messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": [
         {"id": c.id, "type": "function", "function": {"name": c.function.name, "arguments": c.function.arguments}} for c in calls]})
-      follow: list[dict[str, Any]] = []  # screenshots (each with its caption) for the user message
-      for c in calls:
-        try:
-          blocks, _ = run_tool(c.function.name, json.loads(c.function.arguments or "{}"))
-        except json.JSONDecodeError:
-          blocks = [{"type": "text", "text": "arguments must be a JSON object"}]
-        parts = anthropic_blocks_to_openai(blocks)
-        notes: list[str] = []
-        for i, p in enumerate(parts):
-          nxt_is_image = i + 1 < len(parts) and parts[i + 1]["type"] == "image_url"
-          if p["type"] == "image_url" or nxt_is_image:
-            follow.append(p)
-          else:
-            notes.append(p["text"])
-        n_img = sum(p["type"] == "image_url" for p in parts)
-        shown = f"{n_img} screenshot(s) follow in the next message. " if n_img else ""
-        messages.append({"role": "tool", "tool_call_id": c.id, "content": shown + " ".join(notes)})
+      texts, follow = self._tool_results(run_tool, [(c.id, c.function.name, c.function.arguments) for c in calls])
+      messages += [{"role": "tool", "tool_call_id": cid, "content": text} for cid, text in texts]
       if turn + 1 == max_turns - 1:
-        follow.append({"type": "text", "text": "No more tool calls are available. Respond now with ONLY the JSON verdict."})
+        follow.append({"type": "text", "text": _LAST_TURN_NOTE})
       if follow:
         messages.append({"role": "user", "content": follow})
     text = resps[-1].choices[0].message.content or ""
     return JudgeResponse(text=text, usage=self._usage(resps), latency_s=time.time() - t0,
                          model=resps[-1].model or self.cfg.model, n_turns=len(resps))
+
+  def _responses_interactive(
+    self,
+    system: str,
+    user_content: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    run_tool: Callable[[str, dict[str, Any]], tuple[list[dict[str, Any]], bool]],
+    *,
+    max_turns: int,
+    retry: Callable[[Callable[[], Any]], Any],
+  ) -> JudgeResponse:
+    """The same tool loop over the Responses API (function tools with reasoning on).
+
+    Each turn's output items (encrypted reasoning + function calls) are passed back verbatim.
+    On the last allowed turn the tools stay declared (earlier calls reference them) but
+    ``tool_choice`` is ``none``, so the model must answer.
+    """
+    t0 = time.time()
+    rs_tools = [{"type": "function", "name": t["name"], "description": t["description"], "parameters": t["input_schema"]} for t in tools]
+    items: list[dict[str, Any]] = [{"role": "user", "content": openai_parts_to_responses(user_content)}]
+    resps: list[Any] = []
+    for turn in range(max_turns):
+      kwargs = self._responses_kwargs(system, list(items))
+      kwargs["tools"] = rs_tools
+      kwargs["tool_choice"] = "auto" if turn < max_turns - 1 else "none"
+      resp = retry(lambda: self._client.responses.create(**kwargs))
+      resps.append(resp)
+      calls = [o for o in resp.output if o.type == "function_call"]
+      if not calls:
+        break
+      items += [o.model_dump(exclude_none=True) for o in resp.output]
+      texts, follow = self._tool_results(run_tool, [(c.call_id, c.name, c.arguments) for c in calls])
+      items += [{"type": "function_call_output", "call_id": cid, "output": text} for cid, text in texts]
+      if turn + 1 == max_turns - 1:
+        follow.append({"type": "text", "text": _LAST_TURN_NOTE})
+      if follow:
+        items.append({"role": "user", "content": openai_parts_to_responses(follow)})
+    return JudgeResponse(text=resps[-1].output_text or "", usage=self._usage_responses(resps), latency_s=time.time() - t0,
+                         model=resps[-1].model or self.cfg.model, n_turns=len(resps))
+
+
+_LAST_TURN_NOTE = "No more tool calls are available. Respond now with ONLY the JSON verdict."
+
+
+def openai_parts_to_responses(parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+  """Convert OpenAI chat content parts to Responses API input parts."""
+  out: list[dict[str, Any]] = []
+  for p in parts:
+    if p["type"] == "text":
+      out.append({"type": "input_text", "text": p["text"]})
+    elif p["type"] == "image_url":
+      img = {"type": "input_image", "image_url": p["image_url"]["url"]}
+      if p["image_url"].get("detail"):
+        img["detail"] = p["image_url"]["detail"]
+      out.append(img)
+  return out
 
 
 def anthropic_blocks_to_openai(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:

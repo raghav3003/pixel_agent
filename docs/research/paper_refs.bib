@@ -1,0 +1,282 @@
+% paper_refs.bib -- references for the LLM-judge failure-analysis paper on
+% computer-use agents. Metadata verified 2026-10-26 against the arXiv API
+% (export.arxiv.org) and, for venues, the official proceedings / conference
+% pages (neurips.cc, proceedings.mlr.press, aclanthology.org, mlsys.org,
+% icml.cc). Author lists are complete except where marked "and others"
+% (entries with very long author lists).
+
+% ---------------------------------------------------------------------------
+% Benchmarks and environments
+% ---------------------------------------------------------------------------
+
+@inproceedings{xie2024osworld,
+  title     = {{OSWorld}: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments},
+  author    = {Xie, Tianbao and Zhang, Danyang and Chen, Jixuan and Li, Xiaochuan and Zhao, Siheng and Cao, Ruisheng and Hua, Toh Jing and Cheng, Zhoujun and Shin, Dongchan and Lei, Fangyu and Liu, Yitao and Xu, Yiheng and Zhou, Shuyan and Savarese, Silvio and Xiong, Caiming and Zhong, Victor and Yu, Tao},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS), Datasets and Benchmarks Track},
+  volume    = {37},
+  year      = {2024},
+  eprint    = {2404.07972},
+  archivePrefix = {arXiv}
+}
+
+% Published at MLSys 2026 (oral), per mlsys.org/virtual/2026/oral/3865.
+@inproceedings{abhyankar2025osworldhuman,
+  title     = {{OSWorld-Human}: Benchmarking the Efficiency of Computer-Use Agents},
+  author    = {Abhyankar, Reyna and Qi, Qi and Zhang, Yiying},
+  booktitle = {Proceedings of Machine Learning and Systems (MLSys)},
+  year      = {2026},
+  eprint    = {2506.16042},
+  archivePrefix = {arXiv}
+}
+
+% Blog post "Introducing OSWorld-Verified", dated July 28, 2025. Byline is
+% "XLANG Lab"; the individual authors below are from the post's own BibTeX block.
+@misc{osworldverified,
+  title        = {Introducing {OSWorld-Verified}},
+  author       = {Xie, Tianbao and Yuan, Mengqi and Zhang, Danyang and Xiong, Xinzhuang and Shen, Zhennan and Zhou, Zilong and Wang, Xinyuan and Chen, Yanxu and Deng, Jiaqi and Chen, Junda and Wang, Bowen and Wu, Haoyuan and Chen, Jixuan and Wang, Junli and Lu, Dunjie and Hu, Hao and Yu, Tao},
+  howpublished = {XLANG Lab blog},
+  url          = {https://xlang.ai/blog/osworld-verified},
+  month        = jul,
+  year         = {2025}
+}
+
+@article{osworld2,
+  title   = {{OSWorld} 2.0: Benchmarking Computer Use Agents on Long-Horizon Real-World Tasks},
+  author  = {Yuan, Mengqi and Zhou, Zilong and Xiong, Xinzhuang and Wu, Weiming and Sun, Jiayang and Song, Jiamin and Cui, Kaiqian and Wang, Bowen and Wu, Haoyuan and Li, Yitong and others},
+  journal = {arXiv preprint arXiv:2606.29537},
+  year    = {2026}
+}
+
+@inproceedings{zhou2024webarena,
+  title     = {{WebArena}: A Realistic Web Environment for Building Autonomous Agents},
+  author    = {Zhou, Shuyan and Xu, Frank F. and Zhu, Hao and Zhou, Xuhui and Lo, Robert and Sridhar, Abishek and Cheng, Xianyi and Ou, Tianyue and Bisk, Yonatan and Fried, Daniel and Alon, Uri and Neubig, Graham},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2024},
+  eprint    = {2307.13854},
+  archivePrefix = {arXiv}
+}
+
+% ---------------------------------------------------------------------------
+% CUA failure analysis, reliability, and evaluator audits
+% ---------------------------------------------------------------------------
+
+% arXiv 2608.02643 resolves to "CUADebug: Diagnosing and Repairing Computer-Use
+% Agent Failures" (v1 2026-07-31). Its CUAErrorBench = 204 failed OSWorld
+% trajectories with human root-cause annotations.
+@article{cuadebug,
+  title   = {{CUADebug}: Diagnosing and Repairing Computer-Use Agent Failures},
+  author  = {Zhang, Weijia and Zhu, Kunlun and Liu, Zeyi and Chen, Yinting and Ma, Tianyi and Liu, Jiateng and Zhang, Jiaxun and Li, Bingxuan and Tang, Xiangru and Ji, Heng and You, Jiaxuan},
+  journal = {arXiv preprint arXiv:2608.02643},
+  year    = {2026}
+}
+
+@article{reliability2026cua,
+  title   = {On the Reliability of Computer Use Agents},
+  author  = {Gonzalez-Pumariega, Gonzalo and Agashe, Saaket and Yang, Jiachen and Li, Ang and Wang, Xin Eric},
+  journal = {arXiv preprint arXiv:2604.17849},
+  year    = {2026}
+}
+
+% arXiv 2607.28367 title is exactly "How Benchmarks Mis-Score Computer-Use Agents".
+@article{misscore2026,
+  title   = {How Benchmarks Mis-Score Computer-Use Agents},
+  author  = {Dong, Zihan and Ma, Zhiyuan and Wang, Zekun and Li, Yunqing and Liu, Zirou and Deng, Ruixuan and Zhan, Qishi and Qian, Rui},
+  journal = {arXiv preprint arXiv:2607.28367},
+  year    = {2026}
+}
+
+% ---------------------------------------------------------------------------
+% General agent failure attribution / trace diagnosis
+% ---------------------------------------------------------------------------
+
+@article{deshpande2025trail,
+  title   = {{TRAIL}: Trace Reasoning and Agentic Issue Localization},
+  author  = {Deshpande, Darshan and Gangal, Varun and Mehta, Hersh and Krishnan, Jitin and Kannappan, Anand and Qian, Rebecca},
+  journal = {arXiv preprint arXiv:2505.08638},
+  year    = {2025}
+}
+
+% arXiv comment: "Accepted to EMNLP Findings 2026".
+@inproceedings{agentrx,
+  title     = {{AgentRx}: Diagnosing {AI} Agent Failures from Execution Trajectories},
+  author    = {Barke, Shraddha and Goyal, Arnav and Khare, Alind and Singh, Avaljot and Nath, Suman and Bansal, Chetan},
+  booktitle = {Findings of the Association for Computational Linguistics: EMNLP 2026},
+  year      = {2026},
+  eprint    = {2602.02475},
+  archivePrefix = {arXiv}
+}
+
+@article{agentprocessbench,
+  title   = {{AgentProcessBench}: Diagnosing Step-Level Process Quality in Tool-Using Agents},
+  author  = {Fan, Shengda and Ye, Xuyan and Huo, Yupeng and Chen, Zhi-Yuan and Guo, Yiju and Yang, Shenzhi and Yang, Wenkai and Ye, Shuqi and Chen, Jingwen and Chen, Haotian and Cong, Xin and Lin, Yankai},
+  journal = {arXiv preprint arXiv:2603.14465},
+  year    = {2026}
+}
+
+% Author list follows arXiv v1 (18 authors). A version titled "AgentDebug: Where
+% LLM Agents Fail and How They can Learn From Failures" (20 authors, adds
+% Robert Tang and Heng Ji) appears as a poster at the ICML 2026 workshop
+% "Failure Modes in Agentic AI" -- workshop only, so cited as the arXiv preprint.
+@article{agenterrortaxonomy,
+  title   = {Where {LLM} Agents Fail and How They Can Learn From Failures},
+  author  = {Zhu, Kunlun and Liu, Zijia and Li, Bingxuan and Tian, Muxin and Yang, Yingxuan and Zhang, Jiaxun and Han, Pengrui and Xie, Qipeng and Cui, Fuyang and Zhang, Weijia and Ma, Xiaoteng and Yu, Xiaodong and Ramesh, Gowtham and Wu, Jialian and Liu, Zicheng and Lu, Pan and Zou, James and You, Jiaxuan},
+  journal = {arXiv preprint arXiv:2509.25370},
+  year    = {2025}
+}
+
+@inproceedings{zhang2025whichagent,
+  title     = {Which Agent Causes Task Failures and When? On Automated Failure Attribution of {LLM} Multi-Agent Systems},
+  author    = {Zhang, Shaokun and Yin, Ming and Zhang, Jieyu and Liu, Jiale and Han, Zhiguang and Zhang, Jingyang and Li, Beibin and Wang, Chi and Wang, Huazheng and Chen, Yiran and Wu, Qingyun},
+  booktitle = {Proceedings of the 42nd International Conference on Machine Learning (ICML)},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {267},
+  pages     = {76583--76599},
+  year      = {2025},
+  eprint    = {2505.00212},
+  archivePrefix = {arXiv}
+}
+
+@article{longrca,
+  title   = {{LongRCA} Bench: Root-Cause Localization in Long-Horizon Agent Trajectories},
+  author  = {Zhang, Yunfei and Feng, Boyu and Pei, Changhua and Wang, Zexin and Peng, Zhihuang and Liu, Xinlong and Jiang, Hengyue and Ma, Difeng and Zhang, Jiayi and Yao, Yongzhou and Zhao, Yanan and Sun, Fei and Huo, Yintong and Liu, Zhaoyang and Li, Jingjing and Xie, Gaogang and Pei, Dan},
+  journal = {arXiv preprint arXiv:2608.15242},
+  year    = {2026}
+}
+
+% ---------------------------------------------------------------------------
+% LLM / agent judges and automatic evaluation of agents
+% ---------------------------------------------------------------------------
+
+% Listed as a COLM 2025 main-conference paper (Mila COLM 2025 page).
+@inproceedings{lu2025agentrewardbench,
+  title     = {{AgentRewardBench}: Evaluating Automatic Evaluations of Web Agent Trajectories},
+  author    = {L{\`u}, Xing Han and Kazemnejad, Amirhossein and Meade, Nicholas and Patel, Arkil and Shin, Dongchan and Zambrano, Alejandra and Sta{\'n}czak, Karolina and Shaw, Peter and Pal, Christopher J. and Reddy, Siva},
+  booktitle = {Conference on Language Modeling (COLM)},
+  year      = {2025},
+  eprint    = {2504.08942},
+  archivePrefix = {arXiv}
+}
+
+% arXiv journal_ref: COLM 2025.
+@inproceedings{xue2025illusion,
+  title     = {An Illusion of Progress? Assessing the Current State of Web Agents},
+  author    = {Xue, Tianci and Qi, Weijian and Shi, Tianneng and Song, Chan Hee and Gou, Boyu and Song, Dawn and Sun, Huan and Su, Yu},
+  booktitle = {Conference on Language Modeling (COLM)},
+  year      = {2025},
+  eprint    = {2504.01382},
+  archivePrefix = {arXiv}
+}
+
+@inproceedings{he2024webvoyager,
+  title     = {{WebVoyager}: Building an End-to-End Web Agent with Large Multimodal Models},
+  author    = {He, Hongliang and Yao, Wenlin and Ma, Kaixin and Yu, Wenhao and Dai, Yong and Zhang, Hongming and Lan, Zhenzhong and Yu, Dong},
+  booktitle = {Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (ACL)},
+  year      = {2024},
+  eprint    = {2401.13919},
+  archivePrefix = {arXiv}
+}
+
+@inproceedings{pan2024autonomous,
+  title     = {Autonomous Evaluation and Refinement of Digital Agents},
+  author    = {Pan, Jiayi and Zhang, Yichi and Tomlin, Nicholas and Zhou, Yifei and Levine, Sergey and Suhr, Alane},
+  booktitle = {Conference on Language Modeling (COLM)},
+  year      = {2024},
+  eprint    = {2404.06474},
+  archivePrefix = {arXiv}
+}
+
+@inproceedings{zhuge2024agentasajudge,
+  title     = {Agent-as-a-Judge: Evaluate Agents with Agents},
+  author    = {Zhuge, Mingchen and Zhao, Changsheng and Ashley, Dylan and Wang, Wenyi and Khizbullin, Dmitrii and Xiong, Yunyang and Liu, Zechun and Chang, Ernie and Krishnamoorthi, Raghuraman and Tian, Yuandong and Shi, Yangyang and Chandra, Vikas and Schmidhuber, J{\"u}rgen},
+  booktitle = {Proceedings of the 42nd International Conference on Machine Learning (ICML)},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {267},
+  pages     = {80569--80611},
+  year      = {2025},
+  eprint    = {2410.10934},
+  archivePrefix = {arXiv}
+}
+
+@inproceedings{zheng2023judging,
+  title     = {Judging {LLM}-as-a-Judge with {MT-Bench} and {Chatbot Arena}},
+  author    = {Zheng, Lianmin and Chiang, Wei-Lin and Sheng, Ying and Zhuang, Siyuan and Wu, Zhanghao and Zhuang, Yonghao and Lin, Zi and Li, Zhuohan and Li, Dacheng and Xing, Eric P. and Zhang, Hao and Gonzalez, Joseph E. and Stoica, Ion},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS), Datasets and Benchmarks Track},
+  volume    = {36},
+  year      = {2023},
+  eprint    = {2306.05685},
+  archivePrefix = {arXiv}
+}
+
+@inproceedings{kim2024prometheus,
+  title     = {Prometheus: Inducing Fine-grained Evaluation Capability in Language Models},
+  author    = {Kim, Seungone and Shin, Jamin and Cho, Yejin and Jang, Joel and Longpre, Shayne and Lee, Hwaran and Yun, Sangdoo and Shin, Seongjin and Kim, Sungdong and Thorne, James and Seo, Minjoon},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2024},
+  eprint    = {2310.08491},
+  archivePrefix = {arXiv}
+}
+
+@inproceedings{lightman2023verify,
+  title     = {Let's Verify Step by Step},
+  author    = {Lightman, Hunter and Kosaraju, Vineet and Burda, Yura and Edwards, Harri and Baker, Bowen and Lee, Teddy and Leike, Jan and Schulman, John and Sutskever, Ilya and Cobbe, Karl},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2024},
+  eprint    = {2305.20050},
+  archivePrefix = {arXiv}
+}
+
+@inproceedings{wang2023selfconsistency,
+  title     = {Self-Consistency Improves Chain of Thought Reasoning in Language Models},
+  author    = {Wang, Xuezhi and Wei, Jason and Schuurmans, Dale and Le, Quoc and Chi, Ed and Narang, Sharan and Chowdhery, Aakanksha and Zhou, Denny},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2023},
+  eprint    = {2203.11171},
+  archivePrefix = {arXiv}
+}
+
+% ---------------------------------------------------------------------------
+% Models and GUI agents
+% ---------------------------------------------------------------------------
+
+@article{bai2025qwen3vl,
+  title   = {{Qwen3-VL} Technical Report},
+  author  = {Bai, Shuai and Cai, Yuxuan and Chen, Ruizhe and Chen, Keqin and Chen, Xionghui and Cheng, Zesen and Deng, Lianghao and Ding, Wei and Gao, Chang and Ge, Chunjiang and others},
+  journal = {arXiv preprint arXiv:2511.21631},
+  year    = {2025}
+}
+
+@inproceedings{cheng2024seeclick,
+  title     = {{SeeClick}: Harnessing {GUI} Grounding for Advanced Visual {GUI} Agents},
+  author    = {Cheng, Kanzhi and Sun, Qiushi and Chu, Yougang and Xu, Fangzhi and Li, Yantao and Zhang, Jianbing and Wu, Zhiyong},
+  booktitle = {Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)},
+  pages     = {9313--9332},
+  year      = {2024},
+  doi       = {10.18653/v1/2024.acl-long.505},
+  eprint    = {2401.10935},
+  archivePrefix = {arXiv}
+}
+
+% OpenCUA arXiv ID is 2508.09123; published in NeurIPS 2025 (main track).
+@inproceedings{wang2025opencua,
+  title     = {{OpenCUA}: Open Foundations for Computer-Use Agents},
+  author    = {Wang, Xinyuan and Wang, Bowen and Lu, Dunjie and Yang, Junlin and Xie, Tianbao and Wang, Junli and Deng, Jiaqi and Guo, Xiaole and Xu, Yiheng and Wu, Chen Henry and others},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume    = {38},
+  year      = {2025},
+  eprint    = {2508.09123},
+  archivePrefix = {arXiv}
+}
+
+% ---------------------------------------------------------------------------
+% Statistics
+% ---------------------------------------------------------------------------
+
+@article{benjamini1995fdr,
+  title   = {Controlling the False Discovery Rate: A Practical and Powerful Approach to Multiple Testing},
+  author  = {Benjamini, Yoav and Hochberg, Yosef},
+  journal = {Journal of the Royal Statistical Society: Series B (Methodological)},
+  volume  = {57},
+  number  = {1},
+  pages   = {289--300},
+  year    = {1995}
+}

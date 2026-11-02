@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 from PIL import Image
@@ -109,10 +110,10 @@ class _FakeCompletions:
     return self.script.pop(0)
 
 
-def _oa_client(script):
+def _oa_client(script, **cfg_kw):
   from goldjudge.judge.client import _OpenAIBackend
 
-  cfg = JudgeClientConfig(provider="openai", model="judge", max_tokens=100)
+  cfg = JudgeClientConfig(provider="openai", model="judge", max_tokens=100, **cfg_kw)
   backend = object.__new__(_OpenAIBackend)
   backend.cfg = cfg
   backend._client = SimpleNamespace(chat=SimpleNamespace(completions=_FakeCompletions(script)))
@@ -133,8 +134,9 @@ def test_openai_interactive_loop(tmp_path):
   tool = ScreenshotTool(agent=_traj(tmp_path, "a", 5), budget=4, shown={"agent": [4]})
   r = client.chat_interactive("sys", [{"type": "text", "text": "hi"}], [tool.definition()], tool, max_turns=5)
   assert r.text == '{"root_step": 3}' and r.n_turns == 2 and tool.viewed() == [3, 4]
-  assert r.usage == {"prompt_tokens": 20, "completion_tokens": 6, "stop_reason": "stop"}
+  assert r.usage == {"prompt_tokens": 20, "completion_tokens": 6, "cached_tokens": 0, "reasoning_tokens": 0, "stop_reason": "stop"}
   first, second = fake.calls
+  assert first["max_tokens"] == 100 and first["temperature"] == 0.0 and "reasoning_effort" not in first
   assert first["tools"][0]["function"]["name"] == "view_screenshots" and first["tool_choice"] == "auto"
   assert "parameters" in first["tools"][0]["function"]
   msgs = second["messages"]
@@ -144,6 +146,19 @@ def test_openai_interactive_loop(tmp_path):
   imgs = msgs[4]["content"]
   assert [p["type"] for p in imgs] == ["text", "image_url"] and imgs[0]["text"].startswith("(screenshot before step 3")
   assert imgs[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_openai_reasoning_model_request_shape(tmp_path):
+  details = dict(prompt_tokens_details=SimpleNamespace(cached_tokens=4), completion_tokens_details=SimpleNamespace(reasoning_tokens=0))
+  resp = _oa_resp('{"root_step": 1}')
+  resp.usage = SimpleNamespace(prompt_tokens=10, completion_tokens=3, **details)
+  client, fake = _oa_client([resp], reasoning_effort="none")
+  tool = ScreenshotTool(agent=_traj(tmp_path, "a", 5))
+  r = client.chat_interactive("sys", [{"type": "text", "text": "hi"}], [tool.definition()], tool, max_turns=3)
+  (kw,) = fake.calls
+  assert kw["reasoning_effort"] == "none" and kw["max_completion_tokens"] == 100
+  assert "max_tokens" not in kw and "temperature" not in kw and kw["tool_choice"] == "auto"
+  assert r.usage["cached_tokens"] == 4
 
 
 def test_openai_last_turn_has_no_tools_and_flags_truncation(tmp_path):
@@ -162,3 +177,83 @@ def test_openai_bad_arguments_do_not_crash(tmp_path):
   tool = ScreenshotTool(agent=_traj(tmp_path, "a", 5))
   client.chat_interactive("sys", [{"type": "text", "text": "hi"}], [tool.definition()], tool, max_turns=3)
   assert "JSON object" in fake.calls[1]["messages"][3]["content"]
+
+
+# --- OpenAI Responses API (reasoning on) --------------------------------------------------------
+
+class _Item(SimpleNamespace):
+  def model_dump(self, exclude_none=False):
+    return {k: v for k, v in vars(self).items() if not (exclude_none and v is None)}
+
+
+def _rs_resp(text="", calls=(), status="completed", reason=None):
+  out = [_Item(type="reasoning", id="rs1", encrypted_content="xyz", summary=[])]
+  out += [_Item(type="function_call", call_id=cid, name="view_screenshots", arguments=json.dumps({"trajectory": "agent", "steps": s}))
+          for cid, s in calls]
+  usage = SimpleNamespace(input_tokens=10, output_tokens=7, input_tokens_details=SimpleNamespace(cached_tokens=2),
+                          output_tokens_details=SimpleNamespace(reasoning_tokens=5))
+  return SimpleNamespace(output=out, output_text=text, usage=usage, status=status, model="gpt-6-luna",
+                         incomplete_details=SimpleNamespace(reason=reason) if reason else None)
+
+
+class _FakeResponses:
+  def __init__(self, script):
+    self.script, self.calls = list(script), []
+
+  def create(self, **kw):
+    self.calls.append(kw)
+    return self.script.pop(0)
+
+
+def _rs_client(script, effort="medium"):
+  from goldjudge.judge.client import _OpenAIBackend
+
+  cfg = JudgeClientConfig(provider="openai", model="gpt-6-luna", max_tokens=100, reasoning_effort=effort)
+  backend = object.__new__(_OpenAIBackend)
+  backend.cfg = cfg
+  backend._client = SimpleNamespace(responses=_FakeResponses(script))
+  client = object.__new__(JudgeClient)
+  client.cfg, client._backend = cfg, backend
+  return client, backend._client.responses
+
+
+def test_responses_interactive_loop_passes_reasoning_back(tmp_path):
+  client, fake = _rs_client([_rs_resp(calls=[("c1", [3])]), _rs_resp('{"root_step": 3}')])
+  tool = ScreenshotTool(agent=_traj(tmp_path, "a", 5), budget=4)
+  r = client.chat_interactive("sys", [{"type": "text", "text": "hi"}], [tool.definition()], tool, max_turns=5)
+  assert r.text == '{"root_step": 3}' and r.n_turns == 2 and tool.viewed() == [3]
+  assert r.usage == {"prompt_tokens": 20, "completion_tokens": 14, "cached_tokens": 4, "reasoning_tokens": 10, "stop_reason": "stop"}
+  first, second = fake.calls
+  assert first["reasoning"] == {"effort": "medium"} and first["max_output_tokens"] == 100 and first["store"] is False
+  assert first["include"] == ["reasoning.encrypted_content"] and first["instructions"] == "sys"
+  assert first["tools"][0]["name"] == "view_screenshots" and first["tool_choice"] == "auto"
+  assert first["input"][0]["content"] == [{"type": "input_text", "text": "hi"}]
+  types = [i.get("type", i.get("role")) for i in second["input"]]
+  assert types == ["user", "reasoning", "function_call", "function_call_output", "user"]
+  assert second["input"][1]["encrypted_content"] == "xyz" and second["input"][3]["call_id"] == "c1"
+  imgs = second["input"][4]["content"]
+  assert [p["type"] for p in imgs] == ["input_text", "input_image"] and imgs[1]["image_url"].startswith("data:image/jpeg;base64,")
+
+
+def test_responses_last_turn_forces_answer_and_flags_truncation(tmp_path):
+  client, fake = _rs_client([_rs_resp(calls=[("c1", [2])]), _rs_resp("{...", status="incomplete", reason="max_output_tokens")])
+  tool = ScreenshotTool(agent=_traj(tmp_path, "a", 5))
+  r = client.chat_interactive("sys", [{"type": "text", "text": "hi"}], [tool.definition()], tool, max_turns=2)
+  last = fake.calls[1]
+  assert last["tool_choice"] == "none" and "No more tool calls" in last["input"][-1]["content"][-1]["text"]
+  assert r.usage["stop_reason"] == "max_tokens"
+
+
+def test_reasoning_none_stays_on_chat_completions():
+  client, fake = _oa_client([_oa_resp('{"root_step": 1}')], reasoning_effort="none")
+  client.chat("sys", [{"type": "text", "text": "hi"}])
+  assert fake.calls[0]["reasoning_effort"] == "none"
+
+
+def test_fixed_harness_with_reasoning_uses_responses():
+  client, fake = _rs_client([_rs_resp('{"root_step": 1}')], effort="high")
+  r = client.chat("sys", [{"type": "text", "text": "hi"}, {"type": "image_url", "image_url": {"url": "data:x", "detail": "high"}}])
+  kw = fake.calls[0]
+  assert "tools" not in kw and kw["reasoning"] == {"effort": "high"}
+  assert kw["input"][0]["content"][1] == {"type": "input_image", "image_url": "data:x", "detail": "high"}
+  assert r.text == '{"root_step": 1}' and r.usage["reasoning_tokens"] == 5

@@ -80,6 +80,8 @@ def main() -> None:
   ap.add_argument("--max-turns", type=int, default=10, help="on-demand: max model calls per trajectory")
   ap.add_argument("--thinking", choices=["default", "adaptive", "disabled"], default="default", help="Anthropic only")
   ap.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max"], default=None, help="Anthropic only")
+  ap.add_argument("--reasoning-effort", choices=["none", "low", "medium", "high", "xhigh", "max"], default=None,
+                  help="OpenAI reasoning models only (e.g. gpt-6-luna; tool calls need 'none'); omit for vLLM")
   ap.add_argument("--provider", choices=["openai", "anthropic"], default=None, help="default: $JUDGE_PROVIDER or openai")
   ap.add_argument("--model", default=None, help="default: $JUDGE_MODEL")
   ap.add_argument("--env-file", type=Path, default=Path("config/judge.env"), help="KEY=VALUE file loaded into the environment (git-ignored)")
@@ -111,7 +113,8 @@ def main() -> None:
   cfg = BundleConfig(condition=args.cond, agent_image_budget=args.agent_images, gold_image_budget=args.gold_images,
                      image_max_width=args.image_width, on_demand=on_demand)
   load_env_file(args.env_file)
-  ccfg = JudgeClientConfig(max_tokens=args.max_tokens, thinking=args.thinking, effort=args.effort)
+  ccfg = JudgeClientConfig(max_tokens=args.max_tokens, thinking=args.thinking, effort=args.effort,
+                           reasoning_effort=args.reasoning_effort)
   if args.provider:
     ccfg.provider = args.provider
   if args.model:
@@ -153,7 +156,7 @@ def main() -> None:
     verdict = parse_verdict(resp.text, tax, n_steps=traj.n_steps, truncated=resp.usage.get("stop_reason") == "max_tokens")
     return {
       "judge_version": args.judge_version, "prompt_version": PROMPT_VERSION, "taxonomy_version": tax.version, "condition": args.cond,
-      "harness": args.harness, "thinking": args.thinking, "effort": args.effort,
+      "harness": args.harness, "thinking": args.thinking, "effort": args.effort, "reasoning_effort": args.reasoning_effort,
       "source": traj.source, "package": traj.package, "agent": traj.agent, "domain": traj.domain,
       "task_id": traj.task_id, "n_steps": traj.n_steps, "n_images": bundle.n_images, "text_chars": text_chars,
       "gold_key": bundle.meta["gold_key"], "gold_steps": bundle.meta["gold_steps"],
