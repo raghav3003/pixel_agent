@@ -95,7 +95,35 @@ Limitation: reasoning detail differs by agent (median chars per step: Gemini ~73
 logs only an "Action:" line), so goals are compared within agent, and `inferred` is reported. Stated reasoning may
 also not be what drove an action.
 
-## 6. Running
+## 6. Text-only subgoals, agent and gold (`subgoals/textgoals.py`, `scripts/text_subgoals.py`)
+
+A simpler replacement under test (2026-11-02): sections 2-5 derive required states from the evaluator and check them
+on screen, which does not measure what the agent was trying to do, and scored below the plain judge.
+
+1. **Extract**: instruction + per-step text -> ordered subgoals with purpose, `find`/`do`, steps, and how the text says
+   each ended. One prompt for both sides, with no screenshots, evaluator, captions or outcome. Agent text is reasoning +
+   actions; gold text is the OSWorld-Human steps, the only source on all 151 tasks with usable text (Opus 4.7 logs
+   "Executing GUI action.", so it has no reasoning to read).
+2. **Align**: gold list vs agent list, text only. Each gold subgoal is `finished` (claimed, or a later dependent stage
+   started), `unfinished` or `missing`; each agent goal `serves`, is `extra`, or `conflicts`.
+3. **Rule**: first gold subgoal not finished, or an earlier conflicting goal, is the divergence: `knowledge` (only ever
+   searched), `attempted`, `planning` (never worked on), `conflict`, or `unexplained` (text says all done; no step).
+
+Checks: the whole chain runs twice (test-retest), and human-derived gold is compared with a second gold wherever a
+successful run has real reasoning.
+
+4. **Screen check** (`text_subgoals.py screen`, repeat 1 only): (a) each claimed-done subgoal that serves gold is checked
+   against the screenshot after it -> `false_claim`; (b) each long search (>= 4 steps) gets up to 6 screenshots and the
+   actions: was the needed control visible, and did the agent use it? Visible and unused -> `perception`; a text
+   `knowledge` candidate whose target was visible and used stays `knowledge`. Earliest event wins.
+   v0.1 of (b) asked only "was it visible?": 49 of 67 searches said yes, mostly because the agent found it and used it;
+   v0.2 adds the "used" question (17 visible-but-unused). Outputs `screen/` (v0.1, kept) and `screen_v0.2/`.
+
+Results on h50 (49 labelled, gpt-6-luna, 2026-11-05): step within +-2 is .163 text-only (27 predicted), .245 with the
+screen check (38 predicted), vs constant step 3 .388, judge G0 .408, judge G1 .490. The screen check halves
+"unexplained" (22 -> 11). Labels do not line up with the human CUADebug families (e.g. 1 of 8 `perception` is human P).
+
+## 7. Running
 
 ```bash
 # action logs (deterministic, ~90 s)
@@ -107,6 +135,7 @@ $PY scripts/subgoals.py <stage|all> --version V [--pilot data/index/h50.json] ..
 $PY scripts/score_subgoals.py --version V [--pilot ...]   # vs human root step + judge baselines
 $PY scripts/agent_goals.py run --version V ...             # the agent's own subgoals; then `score`
 $PY scripts/subgoal_cost.py V --price-in 0.10 --price-out 0.50
+$PY scripts/text_subgoals.py run|score|review --version V ...   # section 6; outputs data/textgoals/<V>/
 ```
 
 Outputs: `data/subgoals/<V>/{captions,extract,sets,sets_verified,tracks/{gold,fail},localize,metrics}`.

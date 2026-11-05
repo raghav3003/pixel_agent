@@ -14,3 +14,4 @@ config/*.env
 data/actions/**/*.json
 data/subgoals/**/*.json
 data/subgoals/**/*.jsonl
+data/textgoals/**/*.json
