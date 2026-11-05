@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from goldjudge.loaders.cuadebug import _parse_claude
-from goldjudge.parsing import normalize_result, parse_action_type, parse_coords, step_index_from_png
+from goldjudge.parsing import attach_before_after, normalize_result, parse_action_type, parse_coords, step_index_from_png
 from goldjudge.schema import ModelAction, Step, Trajectory
 
 DEFAULT_ROOT = Path(
@@ -151,6 +151,7 @@ def load_trajectory(task_dir: Path, *, package: str, run: str, agent: str, horiz
       continue
     seen[n] = step
     steps.append(step)
+  attach_before_after(steps, shots)
 
   result_txt = task_dir / "result.txt"
   result = normalize_result(result_txt.read_text(encoding="utf-8", errors="replace")) if result_txt.exists() else None

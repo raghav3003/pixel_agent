@@ -90,3 +90,10 @@ STEP_PNG_RE = re.compile(r"^step_(\d+)_(.+)\.png$", re.I)
 def step_index_from_png(name: str) -> int | None:
   m = STEP_PNG_RE.match(name)
   return int(m.group(1)) if m else None
+
+
+def attach_before_after(steps: list, shots: dict[int, str]) -> None:
+  """OSWorld saves step_<t>.png after action t: set screen_after = step_t, screen_before = step_(t-1) (step_0 if logged)."""
+  for s in steps:
+    s.screen_after = shots.get(s.step, "")
+    s.screen_before = shots.get(s.step - 1, "")

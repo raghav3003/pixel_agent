@@ -33,7 +33,11 @@ class ModelAction(BaseModel):
 
 class Step(BaseModel):
   step: int = Field(description="1-based step index; matches the source's step_num")
-  screenshot_path: str = Field(description="Observation *before* this step's action")
+  screenshot_path: str = Field(description="The step_<t> file. OSWorld writes it AFTER action t (lib_run_single.py); "
+                               "code written before 2026-11-05 treats it as the observation before t. New code: "
+                               "use screen_before / screen_after.")
+  screen_before: str = Field(default="", description="Screen before action t: step_<t-1>, or step_0 if logged; '' for t=1 otherwise")
+  screen_after: str = Field(default="", description="Screen after action t: step_<t>")
   action_raw: str = Field(default="", description="Executed code, usually pyautogui")
   action_type: ActionType = "other"
   coords: list[float] | None = Field(default=None, description="Executed pixel coords")

@@ -123,7 +123,74 @@ Results on h50 (49 labelled, gpt-6-luna, 2026-11-05): step within +-2 is .163 te
 screen check (38 predicted), vs constant step 3 .388, judge G0 .408, judge G1 .490. The screen check halves
 "unexplained" (22 -> 11). Labels do not line up with the human CUADebug families (e.g. 1 of 8 `perception` is human P).
 
-## 7. Running
+## 8. Procedure study (2026-11-05)
+
+Four research passes (procedure audit, data diagnosis on dev, CUADebug label semantics, literature) found:
+- **Screenshot bug, pipeline-wide**: OSWorld's `lib_run_single.py` writes `step_<t>.png` from the observation returned by
+  `env.step(action)`, i.e. AFTER action t. Every prompt here (judge bundles included) labelled it "before step t".
+  Loaders now also set `Step.screen_before` / `screen_after`; `screenshot_path` is unchanged so older runs stay reproducible.
+- **Label**: CUADebug's `root_error_step` = earliest step whose executed action introduces a new causal error (not inherited,
+  not a later-repaired slip), placed on the step that acts on the wrong choice; step 1 and a final premature DONE occur.
+  Exact inter-annotator agreement 85.8% before adjudication; CUADebug's own localizer: 37-63% within +-2.
+- **Why subgoal divergence fails**: the root is the step where a wrong action/choice is committed, usually inside a stage the
+  alignment calls "finished" (26/48 dev) or a wrong approach that still "serves" a purpose-level gold step. Segmentation is
+  fine (root exactly at an agent span start 41%, ~2x chance), selection is the problem (right span in 7/48).
+
+Design, fixed before results: dev = h50 (49 labelled), held-out = `data/index/test154.json` (154; 19 of its tasks also occur
+in dev with another agent); primary metric +-2 (as CUADebug), also exact, +-1, +-5; paired sign tests on +-2 against the
+new plain judge; the winner is run once on the held-out set. Methods (`localizers.py`, `scripts/localize_ideas.py`), all
+with the CUADebug label definition and screens labelled "after step t":
+
+| id | method | idea |
+|---|---|---|
+| A | `judge`, `judge_g1` | plain judge (+ OSWorld-Human steps): new baselines |
+| B | `checkpoint` | gold subgoals as checkpoints; earliest step that breaks one for good |
+| C | `spansel` | agent spans as candidates; name the failed evaluator check, pick the span, then the step |
+| D | `docheck` | result of every `do` span judged on screen; first wrong one, then the step |
+| E | `--samples k` + vote | densest +-2 window over k runs of the best method |
+| F | counterfactual | "would fixing this step have been enough?" over the top candidates (if time allows) |
+
+Dev results (h50, n=50, gpt-6-luna medium reasoning, 2026-11-05/06; +-2 / exact):
+
+| method | first run | mean of 5 runs (sd) | note |
+|---|---|---|---|
+| A `judge` | .42 / .32 | .408 (.046) / .284 | old G0 judge: .40 / .22 |
+| A `judge_g1` | .50 / .32 | .440 (.035) / .288 | old G1 judge: .48 / .34 |
+| B `checkpoint` | .48 / .38 | .440 (.032) / .324 | best exact |
+| C `spansel` | .34 / .28 | - | below plain judge |
+| D `docheck` | .44 / .24 | - | |
+| E vote over 5 runs | .40-.46 | - | no gain; lowers exact |
+| E ensembles across methods | .40-.50 | - | no gain |
+| F `counterfactual` | .36 / .26 | - | candidates hold the root only 64%, picks it 56% of those |
+| constant step 3 | .38 / .06 | | |
+
+Run-to-run sd (~.04, about 2 of 50) is as large as the gaps between A, B and the G1 judge, so single runs cannot rank
+them; none differs significantly from A. Subgoal-structured localizers (C, D, F, and the section 6 rule) do not beat a
+judge that reads the whole run; gold helps a little as context (G1, checkpoints), not as an alignment target.
+
+**Held-out check (test154, one run each) reversed the dev picture** (+-2 / exact):
+
+| method | reasoning | test154 | dev h50 |
+|---|---|---|---|
+| old judge G0 (`gpt6luna-fixed-v0.3`) | none | **.519** / .318 | .40 / .22 |
+| old judge G1 | none | .513 / **.338** | .48 / .34 |
+| old judge G1, screens labelled "after" (`gpt6luna-fixed-after-v0.3`) | none | **.539** / .325 | .38 / .18 |
+| old judge G0, screens labelled "after" | none | .487 / .318 | .36 / .18 |
+| old judge G0 (`gpt6luna-think-fixed-v0.3`) | medium | .422 / .253 | .44 / .30 |
+| constant step 3 | | .442 / .123 | .38 / .06 |
+| B `checkpoint` (new harness) | medium / none | .422 / .435 | .48 / .30 |
+| A `judge_g1` (new harness) | medium / none | .416 / .364 | .50 / .38 |
+| A `judge` (new harness) | medium / none | .403 / .338 | .42 / .36 |
+
+- The new harness loses to the old judge on held-out (G0: p=.01 at medium, p<.01 without reasoning) and does not beat the
+  constant. Medium reasoning makes judges predict late (old G0 late misses .22 -> .42), and the held-out set is 79% Claude
+  runs, whose roots come early (median 38% of the run in test, 14% in dev); dev had 22 Claude runs, so it hid this.
+- Correcting the screenshot labels on the old judge has no significant effect (G0 -.03, G1 +.03 on test154; p=.47/.57).
+  The legacy-labelled results are not materially distorted by the bug.
+- The held-out set has now been looked at twice; any further claim needs a fresh split or cross-validation, and dev
+  splits should be stratified by agent.
+
+## 9. Running
 
 ```bash
 # action logs (deterministic, ~90 s)
@@ -136,6 +203,7 @@ $PY scripts/score_subgoals.py --version V [--pilot ...]   # vs human root step +
 $PY scripts/agent_goals.py run --version V ...             # the agent's own subgoals; then `score`
 $PY scripts/subgoal_cost.py V --price-in 0.10 --price-out 0.50
 $PY scripts/text_subgoals.py run|score|review --version V ...   # section 6; outputs data/textgoals/<V>/
+$PY scripts/localize_ideas.py run --method M --version V --pilot ... ; score  # section 8; outputs data/ideas/<V>/
 ```
 
 Outputs: `data/subgoals/<V>/{captions,extract,sets,sets_verified,tracks/{gold,fail},localize,metrics}`.

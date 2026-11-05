@@ -73,6 +73,8 @@ def main() -> None:
   ap.add_argument("--gold-images", type=int, default=8)
   ap.add_argument("--image-width", type=int, default=1280)
   ap.add_argument("--max-tokens", type=int, default=1500, help="includes thinking tokens; use >=16000 with thinking")
+  ap.add_argument("--screen-labels", choices=["legacy", "after"], default="legacy",
+                  help="after: label step_<t>.png as the screen after step t (what OSWorld saved); legacy = all runs before 2026-11-05")
   ap.add_argument("--harness", choices=["fixed", "on-demand"], default="fixed",
                   help="on-demand: --agent-images/--gold-images are the seed; the judge requests more via a tool")
   ap.add_argument("--view-budget", type=int, default=24, help="on-demand: extra screenshots per trajectory")
@@ -110,7 +112,9 @@ def main() -> None:
     sel = sel.head(args.limit)
 
   on_demand = args.harness == "on-demand"
-  cfg = BundleConfig(condition=args.cond, agent_image_budget=args.agent_images, gold_image_budget=args.gold_images,
+  if args.screen_labels == "after" and args.harness != "fixed":
+    ap.error("--screen-labels after is implemented for the fixed harness only")
+  cfg = BundleConfig(condition=args.cond, agent_image_budget=args.agent_images, gold_image_budget=args.gold_images, screen_labels=args.screen_labels,
                      image_max_width=args.image_width, on_demand=on_demand)
   load_env_file(args.env_file)
   ccfg = JudgeClientConfig(max_tokens=args.max_tokens, thinking=args.thinking, effort=args.effort,
@@ -156,7 +160,7 @@ def main() -> None:
     verdict = parse_verdict(resp.text, tax, n_steps=traj.n_steps, truncated=resp.usage.get("stop_reason") == "max_tokens")
     return {
       "judge_version": args.judge_version, "prompt_version": PROMPT_VERSION, "taxonomy_version": tax.version, "condition": args.cond,
-      "harness": args.harness, "thinking": args.thinking, "effort": args.effort, "reasoning_effort": args.reasoning_effort,
+      "harness": args.harness, "screen_labels": args.screen_labels, "thinking": args.thinking, "effort": args.effort, "reasoning_effort": args.reasoning_effort,
       "source": traj.source, "package": traj.package, "agent": traj.agent, "domain": traj.domain,
       "task_id": traj.task_id, "n_steps": traj.n_steps, "n_images": bundle.n_images, "text_chars": text_chars,
       "gold_key": bundle.meta["gold_key"], "gold_steps": bundle.meta["gold_steps"],

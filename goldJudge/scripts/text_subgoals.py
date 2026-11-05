@@ -122,7 +122,11 @@ def run(ctx: Ctx) -> int:
   if ctx.args.cmd == "screen":
     return run_units("screen", rows, lambda r: screen_one(ctx, r), ctx.args.workers)
   failed = 0
-  failed += run_units("gold", [(t, n) for t in ctx.tasks for n in repeats], gold_one, ctx.args.workers)
+  stages = set(ctx.args.stages)
+  if "gold" in stages:
+    failed += run_units("gold", [(t, n) for t in ctx.tasks for n in repeats], gold_one, ctx.args.workers)
+  if stages == {"gold"}:
+    return failed
   failed += run_units("agent", [(r, n) for r in rows for n in repeats], agent_one, ctx.args.workers)
   failed += run_units("align", [(r, n) for r in rows for n in repeats], align_one, ctx.args.workers)
   failed += run_units("gold_ai", list(rich.itertuples()), gold_ai_one, ctx.args.workers)
@@ -325,6 +329,8 @@ def main() -> None:
   ap.add_argument("--pilot")
   ap.add_argument("--limit", type=int, default=None)
   ap.add_argument("--repeats", type=int, default=2)
+  ap.add_argument("--stages", nargs="*", default=["gold", "agent", "align", "gold_ai", "align_gold"],
+                  help="run: 'gold' alone extracts only the gold subgoals (all that the checkpoint localizer needs)")
   ap.add_argument("--env-file", default=str(ROOT / "config/openai.env"))
   ap.add_argument("--provider", default=None)
   ap.add_argument("--model", default=None)

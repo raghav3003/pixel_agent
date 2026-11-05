@@ -40,6 +40,9 @@ class BundleConfig:
   include_eval_log: bool = True
   on_demand: bool = False  # seed-only screenshots; judge requests more via view_screenshots
   extra_must_steps: list[int] = field(default_factory=list)  # e.g. steps a first pass flagged
+  # "legacy": step_<t>.png labelled "before step t" (how every run up to 2026-11-05 was built). "after": the same image
+  # labelled as the screen after step t and placed after that step's text, which is what OSWorld actually saved.
+  screen_labels: str = "legacy"
 
 
 @dataclass
@@ -103,7 +106,9 @@ def gold_trajectory_parts(gold: Trajectory, cfg: BundleConfig) -> tuple[list[dic
     _txt(
       "# ADDITIONAL INFORMATION — one successful run of this task by another agent (guidance only; "
       "the agent under review may use a different valid route; do not compare step by step). "
-      f"{gold.n_steps} steps, evaluator score {gold.result}. Screenshots are the observation BEFORE the listed action."
+      f"{gold.n_steps} steps, evaluator score {gold.result}. "
+      + ("Each screenshot shows the screen AFTER the listed action." if cfg.screen_labels == "after"
+         else "Screenshots are the observation BEFORE the listed action.")
     )
   ]
   img_steps = set(select_steps_for_images(gold.n_steps, cfg.gold_image_budget))
@@ -114,10 +119,14 @@ def gold_trajectory_parts(gold: Trajectory, cfg: BundleConfig) -> tuple[list[dic
     line = f"g{s.step}: [{s.action_type}] {_trunc(s.action_raw, cfg.action_chars)}"
     if s.intent and s.intent not in {"DONE", "WAIT", "FAIL"}:
       line += f"  // intent: {_trunc(s.intent, 160)}"
-    if s.step in included:
+    after = cfg.screen_labels == "after"
+    if s.step in included and not after:
       parts.append(_txt(f"(screenshot before g{s.step})"))
       parts.append(_img(s.screenshot_path, cfg.image_max_width))
     parts.append(_txt(line))
+    if s.step in included and after:
+      parts.append(_txt(f"(screen after g{s.step})"))
+      parts.append(_img(s.screenshot_path, cfg.image_max_width))
   return parts, included
 
 
@@ -126,16 +135,18 @@ def agent_trajectory_parts(traj: Trajectory, cfg: BundleConfig) -> tuple[list[di
     _txt(
       f"# AGENT TRAJECTORY (FAILED; evaluator score {traj.result}). Agent: {traj.agent}; "
       f"{traj.n_steps} steps; step horizon {traj.horizon}.\n"
-      "For each step: the screenshot is the observation BEFORE the action; 'thought' is the agent's "
-      "reasoning; 'executed' is what actually ran on the machine (pixels, 1920x1080)."
+      + ("For each step: the screenshot shows the screen AFTER that step's action; 'thought' is the agent's "
+         if cfg.screen_labels == "after" else "For each step: the screenshot is the observation BEFORE the action; 'thought' is the agent's ")
+      + "reasoning; 'executed' is what actually ran on the machine (pixels, 1920x1080)."
     )
   ]
   img_steps = set(select_steps_for_images(traj.n_steps, cfg.agent_image_budget, must=cfg.extra_must_steps))
   included = [s.step for s in traj.steps if s.step in img_steps and image_path_ok(s.screenshot_path)]
   if cfg.on_demand:
     parts.append(_txt(_on_demand_note(included, traj.n_steps, "agent")))
+  after = cfg.screen_labels == "after"
   for s in traj.steps:
-    if s.step in included:
+    if s.step in included and not after:
       parts.append(_txt(f"(screenshot before step {s.step})"))
       parts.append(_img(s.screenshot_path, cfg.image_max_width))
     block = [f"## step {s.step}"]
@@ -148,6 +159,9 @@ def agent_trajectory_parts(traj: Trajectory, cfg: BundleConfig) -> tuple[list[di
       block.append(f"model action: {ma.type} at {ma.coordinate} (model coordinate space {traj.model_coord_space})")
     block.append(f"executed: [{s.action_type}] {_trunc(s.action_raw, cfg.action_chars)}")
     parts.append(_txt("\n".join(block)))
+    if s.step in included and after:
+      parts.append(_txt(f"(screen after step {s.step})"))
+      parts.append(_img(s.screenshot_path, cfg.image_max_width))
   return parts, included
 
 
