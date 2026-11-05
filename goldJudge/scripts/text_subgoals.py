@@ -125,12 +125,14 @@ def run(ctx: Ctx) -> int:
   stages = set(ctx.args.stages)
   if "gold" in stages:
     failed += run_units("gold", [(t, n) for t in ctx.tasks for n in repeats], gold_one, ctx.args.workers)
-  if stages == {"gold"}:
-    return failed
-  failed += run_units("agent", [(r, n) for r in rows for n in repeats], agent_one, ctx.args.workers)
-  failed += run_units("align", [(r, n) for r in rows for n in repeats], align_one, ctx.args.workers)
-  failed += run_units("gold_ai", list(rich.itertuples()), gold_ai_one, ctx.args.workers)
-  failed += run_units("align_gold", list(rich.itertuples()), align_gold_one, ctx.args.workers)
+  if "agent" in stages:
+    failed += run_units("agent", [(r, n) for r in rows for n in repeats], agent_one, ctx.args.workers)
+  if "align" in stages:
+    failed += run_units("align", [(r, n) for r in rows for n in repeats], align_one, ctx.args.workers)
+  if "gold_ai" in stages:
+    failed += run_units("gold_ai", list(rich.itertuples()), gold_ai_one, ctx.args.workers)
+  if "align_gold" in stages:
+    failed += run_units("align_gold", list(rich.itertuples()), align_gold_one, ctx.args.workers)
   return failed
 
 

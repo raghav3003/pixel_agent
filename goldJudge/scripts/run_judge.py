@@ -28,6 +28,7 @@ from tqdm import tqdm
 
 from goldjudge.judge.bundle import BundleConfig, build_bundle
 from goldjudge.judge.client import JudgeClient, JudgeClientConfig, load_env_file
+from goldjudge.judge.context import context_sections
 from goldjudge.judge.interactive import ScreenshotTool
 from goldjudge.judge.prompts import PROMPT_VERSION, build_system_prompt, screenshot_rules
 from goldjudge.judge.verdict import parse_verdict
@@ -73,6 +74,8 @@ def main() -> None:
   ap.add_argument("--gold-images", type=int, default=8)
   ap.add_argument("--image-width", type=int, default=1280)
   ap.add_argument("--max-tokens", type=int, default=1500, help="includes thinking tokens; use >=16000 with thinking")
+  ap.add_argument("--context", nargs="*", default=[], choices=["subgoals", "stepflags", "constraints"],
+                  help="analysis aids added to the input (goldjudge/judge/context.py); default none")
   ap.add_argument("--screen-labels", choices=["legacy", "after"], default="legacy",
                   help="after: label step_<t>.png as the screen after step t (what OSWorld saved); legacy = all runs before 2026-11-05")
   ap.add_argument("--harness", choices=["fixed", "on-demand"], default="fixed",
@@ -144,6 +147,10 @@ def main() -> None:
     meta = osw.load_task(traj.domain, traj.task_id)
     gold = _load_gold(gold_df, traj.task_id, args.cond) if args.cond in {"G2", "G3"} else None
     bundle = build_bundle(traj, meta, osw, cfg, gold=gold, eval_log=_read_eval_log(traj.dir))
+    context_have = None
+    if args.context:  # analysis aids go right after the task section, before any reference and the trajectory
+      ctx_text, context_have = context_sections(args.context, traj.agent, traj.task_id)
+      bundle.content.insert(1, {"type": "text", "text": ctx_text})
     text_chars = sum(len(p["text"]) for p in bundle.content if p["type"] == "text")
     if args.dry_run:
       print(f"{r.agent} {traj.domain}/{traj.task_id}: steps={traj.n_steps} images={bundle.n_images} text_chars={text_chars} "
@@ -160,7 +167,8 @@ def main() -> None:
     verdict = parse_verdict(resp.text, tax, n_steps=traj.n_steps, truncated=resp.usage.get("stop_reason") == "max_tokens")
     return {
       "judge_version": args.judge_version, "prompt_version": PROMPT_VERSION, "taxonomy_version": tax.version, "condition": args.cond,
-      "harness": args.harness, "screen_labels": args.screen_labels, "thinking": args.thinking, "effort": args.effort, "reasoning_effort": args.reasoning_effort,
+      "harness": args.harness, "screen_labels": args.screen_labels, "context": args.context, "context_have": context_have,
+      "thinking": args.thinking, "effort": args.effort, "reasoning_effort": args.reasoning_effort,
       "source": traj.source, "package": traj.package, "agent": traj.agent, "domain": traj.domain,
       "task_id": traj.task_id, "n_steps": traj.n_steps, "n_images": bundle.n_images, "text_chars": text_chars,
       "gold_key": bundle.meta["gold_key"], "gold_steps": bundle.meta["gold_steps"],

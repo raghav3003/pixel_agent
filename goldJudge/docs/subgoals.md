@@ -190,6 +190,35 @@ judge that reads the whole run; gold helps a little as context (G1, checkpoints)
 - The held-out set has now been looked at twice; any further claim needs a fresh split or cross-validation, and dev
   splits should be stratified by agent.
 
+## 10. Ideas 6, 1 and 4 (2026-11-06), all 204 labelled failures, no reasoning, screens labelled "after"
+
+Extraction audit first (text-subgoal lists, dev): parsing is clean (spans ordered; boundaries stable across repeats, 93%
+within 1 step) but subgoals are coarse (~7 steps each for Claude; one span covers >=50% of the run in 11/50), written
+with hindsight (a span's purpose reflects what later happened), and the text version marks nothing as required. Roots
+sit below the purpose level: a wrong click/value inside a correctly-purposed span, or a wrong method choice.
+
+- **Idea 1** (`stepcheck.py`, `scripts/step_checks.py`): per step, intent from that step's reasoning only, outcome from the
+  screens before/after. ~5.4 mismatches per run; first mismatch +-2 .275, first harmful .123; a mismatch within +-2 of
+  the root exists in .475 of runs. (An earlier caption-based version looked like .41 on dev; it did not hold up.)
+- **Idea 4** (`constraints.py`, `scripts/constraint_check.py`): 1.4 method constraints per task, 46/211 broken by a
+  successful run and dropped; 340/452 candidate states marked required. Used alone to localize: +-2 .319.
+- **Idea 6** (`judge/context.py`, `run_judge.py --context`): the original judge prompt plus analysis aids.
+
+| predictor (n=204) | +-2 | exact | dev / held-out +-2 | vs baseline |
+|---|---|---|---|---|
+| baseline: original judge G0, "after" labels | .456 | .284 | .36 / .487 | |
+| original judge G0, legacy labels | .490 | .294 | .40 / .519 | +25/-18 p=.36 |
+| original judge G1, legacy / "after" labels | .505 / .500 | .338 / .289 | | p=.18 / .15 |
+| + agent subgoals (S) | .431 | .265 | .40 / .442 | p=.52 |
+| + step flags (F) | .451 | .284 | .32 / .494 | p=1.0 |
+| + S + F | .456 | .299 | .40 / .474 | p=1.0 |
+| + constraints (C) | .466 | .294 | .40 / .487 | p=.86 |
+| + S + F + C | .446 | .279 | .38 / .468 | p=.86 |
+| idea 1 alone / idea 4 alone | .275 / .319 | | | p=.02 / <.01 |
+| constant step 3 | .426 | .108 | | |
+
+None of the aids changes the judge's accuracy; the best numbers remain the original judge with the human's steps (G1).
+
 ## 9. Running
 
 ```bash

@@ -16,3 +16,5 @@ data/subgoals/**/*.json
 data/subgoals/**/*.jsonl
 data/textgoals/**/*.json
 data/ideas/**/*.json
+data/stepcheck/**/*.json
+data/constraints/**/*.json
