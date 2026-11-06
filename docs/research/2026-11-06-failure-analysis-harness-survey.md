@@ -87,3 +87,32 @@ at a DONE/FAIL step: .08; at the last step: .09 (omissions are rare).
 - The position prior adds nothing on top of the judge (training-fold +-2 .50-.53 vs CV .485).
 Outputs: `goldJudge/data/harness2/gpt6luna-h2-v0.1/`, code `goldJudge/src/goldjudge/subgoals/harness2.py`,
 `goldJudge/scripts/harness2.py`, `run_judge.py --topk`. Cost of this round ~$3.
+
+## Label anchoring check: reproducing CUADebug's own RCA harnesses (2026-11-06)
+
+`goldJudge/src/goldjudge/subgoals/cuadebugger.py`, `goldJudge/scripts/cuadebugger.py`; prompts from the paper's
+Appendix A.1 (tool-augmented backward-tracing ReAct debugger with get_step_details + finish, older screenshots dropped,
+40 turns; and the prompt-only baseline). gpt-6-luna, no reasoning; cost $2.48. Deviations: R/S subtype names from our
+taxonomy notes, no episodic memory, no execution-error field.
+
+The dataset does not store the machine proposals, only which debugger the annotator started from (`chosen_debugger`):
+54/204 failures, i.e. 83% of the Gemini and 97% of the Qwen runs, none of the 144 Claude runs (seeded by a Claude Sonnet
+4.5 debugger 34, Gemini 2.5 Pro 14, Qwen3.5 6).
+
+| predictor | +-2 | exact | +-2 seeded (54) | +-2 unseeded (150) | lift |
+|---|---|---|---|---|---|
+| original judge G1 | **.505** | **.338** | .630 | .460 | +.17 |
+| original judge G0 | .490 | .294 | .593 | .453 | +.14 |
+| reproduced CUADebug prompt-only | .377 | .225 | .426 | .360 | +.07 |
+| reproduced CUADebugger (tool loop) | .333 | .191 | .426 | .300 | +.13 |
+| constant step 3 | .426 | .108 | .481 | .407 | +.07 |
+
+- No sign that the labels favour CUADebug's procedure: the reproductions are well below our judge everywhere, and their
+  gain on seeded cases is not larger than the judge's. Every predictor scores higher on seeded cases because those are
+  the Gemini/Qwen runs (even the constant gains +.07), so seeding is confounded with agent and cannot be separated here.
+- This does not rule out anchoring to the specific proposals annotators saw (made by Claude Sonnet 4.5 / Gemini 2.5 Pro
+  debuggers, not stored); testing that needs the proposals or a rerun with those debugger models.
+- The backward-tracing debugger is late-biased (median predicted position .60 of the run vs .33 for the human root;
+  51% of misses late, 16% early) and in 41% of runs never inspects any step at or before the human root.
+- For reference, the paper reports +-2 33-50 for prompt-only and 37-63 for the debugger with stronger debugger models;
+  our prompt-only reproduction (.377) falls in their range, the tool loop (.333) below it.

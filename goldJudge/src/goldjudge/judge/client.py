@@ -179,6 +179,7 @@ class _OpenAIBackend:
     *,
     max_turns: int,
     retry: Callable[[Callable[[], Any]], Any],
+    keep_last_images: int | None = None,
   ) -> JudgeResponse:
     """Tool-use loop over an OpenAI-compatible endpoint (vLLM needs ``--enable-auto-tool-choice``).
 
@@ -194,6 +195,8 @@ class _OpenAIBackend:
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}, {"role": "user", "content": user_content}]
     resps: list[Any] = []
     for turn in range(max_turns):
+      if keep_last_images is not None:  # as CUADebugger: drop older screenshots, keep the written observations
+        _drop_old_images(messages, keep_last_images)
       kwargs = self._kwargs(list(messages))
       if turn < max_turns - 1:
         kwargs["tools"] = oa_tools
@@ -257,6 +260,19 @@ class _OpenAIBackend:
 
 
 _LAST_TURN_NOTE = "No more tool calls are available. Respond now with ONLY the JSON verdict."
+
+
+def _drop_old_images(messages: list[dict[str, Any]], keep: int) -> None:
+  """Replace all but the last ``keep`` images in follow-up user messages (not the first user message) by a note."""
+  seen = 0
+  for m in reversed(messages[2:]):
+    if m.get("role") != "user" or not isinstance(m.get("content"), list):
+      continue
+    for i in range(len(m["content"]) - 1, -1, -1):
+      if m["content"][i].get("type") == "image_url":
+        seen += 1
+        if seen > keep:
+          m["content"][i] = {"type": "text", "text": "(older screenshot removed from context)"}
 
 
 def openai_parts_to_responses(parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -414,10 +430,11 @@ class JudgeClient:
     return self._retry(lambda: self._backend.chat(system, user_content))
 
   def chat_interactive(self, system: str, user_content: list[dict[str, Any]], tools: list[dict[str, Any]],
-                       run_tool: Callable[[str, dict[str, Any]], tuple[list[dict[str, Any]], bool]], *, max_turns: int) -> JudgeResponse:
+                       run_tool: Callable[[str, dict[str, Any]], tuple[list[dict[str, Any]], bool]], *, max_turns: int,
+                       **kw: Any) -> JudgeResponse:
     if not hasattr(self._backend, "chat_interactive"):
       raise NotImplementedError(f"on-demand screenshots are not implemented for provider {self.cfg.provider!r}")
-    return self._backend.chat_interactive(system, user_content, tools, run_tool, max_turns=max_turns, retry=self._retry)
+    return self._backend.chat_interactive(system, user_content, tools, run_tool, max_turns=max_turns, retry=self._retry, **kw)
 
   def _retry(self, fn: Callable[[], Any]) -> Any:
     last: Exception | None = None

@@ -19,3 +19,4 @@ data/ideas/**/*.json
 data/stepcheck/**/*.json
 data/constraints/**/*.json
 data/harness2/**/*.json
+data/cuadebugger/**/*.json
