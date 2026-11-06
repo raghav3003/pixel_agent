@@ -74,6 +74,7 @@ def main() -> None:
   ap.add_argument("--gold-images", type=int, default=8)
   ap.add_argument("--image-width", type=int, default=1280)
   ap.add_argument("--max-tokens", type=int, default=1500, help="includes thinking tokens; use >=16000 with thinking")
+  ap.add_argument("--topk", type=int, default=0, help="also ask for top-k candidate steps with confidences + a symptom step")
   ap.add_argument("--context", nargs="*", default=[], choices=["subgoals", "stepflags", "constraints"],
                   help="analysis aids added to the input (goldjudge/judge/context.py); default none")
   ap.add_argument("--screen-labels", choices=["legacy", "after"], default="legacy",
@@ -130,6 +131,12 @@ def main() -> None:
   has_gold_traj = args.cond in {"G2", "G3"}
   shots = screenshot_rules(budget=args.view_budget, per_call=args.per_call, has_gold=has_gold_traj) if on_demand else ""
   system_prompt = build_system_prompt(tax, has_reference=args.cond != "G0", screenshots=shots)
+  if args.topk:  # extra fields for candidate-based harnesses; parsed from the saved raw reply
+    system_prompt += (
+      f"\n\nIn the same JSON object also include \"candidate_steps\": up to {args.topk} objects "
+      "{\"step\": <int>, \"confidence\": <0-1>} for the steps most likely to be the root step, most likely first "
+      "(the root_step you chose must be the first), and \"symptom_step\": <int>, the step where the failure first "
+      "becomes visible.")
 
   out_dir = args.out / args.judge_version / args.cond
   if not args.dry_run:
@@ -167,7 +174,7 @@ def main() -> None:
     verdict = parse_verdict(resp.text, tax, n_steps=traj.n_steps, truncated=resp.usage.get("stop_reason") == "max_tokens")
     return {
       "judge_version": args.judge_version, "prompt_version": PROMPT_VERSION, "taxonomy_version": tax.version, "condition": args.cond,
-      "harness": args.harness, "screen_labels": args.screen_labels, "context": args.context, "context_have": context_have,
+      "harness": args.harness, "screen_labels": args.screen_labels, "context": args.context, "context_have": context_have, "topk": args.topk,
       "thinking": args.thinking, "effort": args.effort, "reasoning_effort": args.reasoning_effort,
       "source": traj.source, "package": traj.package, "agent": traj.agent, "domain": traj.domain,
       "task_id": traj.task_id, "n_steps": traj.n_steps, "n_images": bundle.n_images, "text_chars": text_chars,
