@@ -19,6 +19,7 @@ the judge requests others with a tool, in every condition:
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import time
 from pathlib import Path
@@ -29,6 +30,7 @@ from tqdm import tqdm
 from goldjudge.judge.bundle import BundleConfig, build_bundle
 from goldjudge.judge.client import JudgeClient, JudgeClientConfig, load_env_file
 from goldjudge.judge.context import context_sections
+from goldjudge.parsing import run_date
 from goldjudge.judge.interactive import ScreenshotTool
 from goldjudge.judge.prompts import PROMPT_VERSION, build_system_prompt, screenshot_rules
 from goldjudge.judge.verdict import parse_verdict
@@ -74,6 +76,12 @@ def main() -> None:
   ap.add_argument("--gold-images", type=int, default=8)
   ap.add_argument("--image-width", type=int, default=1280)
   ap.add_argument("--max-tokens", type=int, default=1500, help="includes thinking tokens; use >=16000 with thinking")
+  ap.add_argument("--extra-file", default=None, help='JSON {"agent|task_id": {"system", "context", "must_steps", "image_budget"}}')
+  ap.add_argument("--only-extra", action="store_true", help="with --extra-file: skip trajectories it does not cover")
+  ap.add_argument("--task-version", choices=["checkout", "run-date"], default="checkout",
+                  help="run-date: task JSON + metric source from the OSWorld commit in effect when the trajectory was recorded")
+  ap.add_argument("--thought-chars", type=int, default=700)
+  ap.add_argument("--show-reflection", action="store_true")
   ap.add_argument("--topk", type=int, default=0, help="also ask for top-k candidate steps with confidences + a symptom step")
   ap.add_argument("--context", nargs="*", default=[], choices=["subgoals", "stepflags", "constraints"],
                   help="analysis aids added to the input (goldjudge/judge/context.py); default none")
@@ -118,7 +126,7 @@ def main() -> None:
   on_demand = args.harness == "on-demand"
   if args.screen_labels == "after" and args.harness != "fixed":
     ap.error("--screen-labels after is implemented for the fixed harness only")
-  cfg = BundleConfig(condition=args.cond, agent_image_budget=args.agent_images, gold_image_budget=args.gold_images, screen_labels=args.screen_labels,
+  cfg = BundleConfig(condition=args.cond, agent_image_budget=args.agent_images, gold_image_budget=args.gold_images, screen_labels=args.screen_labels, thought_chars=args.thought_chars, show_reflection=args.show_reflection,
                      image_max_width=args.image_width, on_demand=on_demand)
   load_env_file(args.env_file)
   ccfg = JudgeClientConfig(max_tokens=args.max_tokens, thinking=args.thinking, effort=args.effort,
@@ -131,6 +139,9 @@ def main() -> None:
   has_gold_traj = args.cond in {"G2", "G3"}
   shots = screenshot_rules(budget=args.view_budget, per_call=args.per_call, has_gold=has_gold_traj) if on_demand else ""
   system_prompt = build_system_prompt(tax, has_reference=args.cond != "G0", screenshots=shots)
+  extras = json.loads(Path(args.extra_file).read_text(encoding="utf-8")) if args.extra_file else {}
+  if args.extra_file and args.only_extra:  # run only the trajectories the extra file covers
+    sel = sel[[f"{a}|{t}" in extras for a, t in zip(sel.agent, sel.task_id)]]
   if args.topk:  # extra fields for candidate-based harnesses; parsed from the saved raw reply
     system_prompt += (
       f"\n\nIn the same JSON object also include \"candidate_steps\": up to {args.topk} objects "
@@ -151,9 +162,16 @@ def main() -> None:
       traj = cuadebug.load_trajectory(Path(r.dir), r.package)
     else:
       traj = osworld_verified.load_trajectory(Path(r.dir), package=r.package, run=r.run, agent=r.agent, horizon=r.horizon)
-    meta = osw.load_task(traj.domain, traj.task_id)
+    commit = osw.commit_at(run_date(traj)) if args.task_version == "run-date" and run_date(traj) else None
+    meta = osw.load_task(traj.domain, traj.task_id, commit=commit)
     gold = _load_gold(gold_df, traj.task_id, args.cond) if args.cond in {"G2", "G3"} else None
-    bundle = build_bundle(traj, meta, osw, cfg, gold=gold, eval_log=_read_eval_log(traj.dir))
+    extra = extras.get(f"{traj.agent}|{traj.task_id}", {})  # per-trajectory additions (--extra-file)
+    row_cfg = dataclasses.replace(cfg, extra_must_steps=[int(x) for x in extra.get("must_steps", [])],
+                                  agent_image_budget=int(extra.get("image_budget", cfg.agent_image_budget)))
+    row_system = system_prompt + (("\n\n" + extra["system"]) if extra.get("system") else "")
+    bundle = build_bundle(traj, meta, osw, row_cfg, gold=gold, eval_log=_read_eval_log(traj.dir))
+    if extra.get("context"):  # after the task section, before any reference and the trajectory
+      bundle.content.insert(1, {"type": "text", "text": extra["context"]})
     context_have = None
     if args.context:  # analysis aids go right after the task section, before any reference and the trajectory
       ctx_text, context_have = context_sections(args.context, traj.agent, traj.task_id)
@@ -168,13 +186,14 @@ def main() -> None:
     if on_demand:
       tool = ScreenshotTool(agent=traj, gold=gold, budget=args.view_budget, per_call=args.per_call, max_width=args.image_width,
                             shown={"agent": bundle.agent_image_steps, "gold": bundle.gold_image_steps})
-      resp = client.chat_interactive(system_prompt, bundle.content, [tool.definition()], tool, max_turns=args.max_turns)
+      resp = client.chat_interactive(row_system, bundle.content, [tool.definition()], tool, max_turns=args.max_turns)
     else:
-      resp = client.chat(system_prompt, bundle.content)
+      resp = client.chat(row_system, bundle.content)
     verdict = parse_verdict(resp.text, tax, n_steps=traj.n_steps, truncated=resp.usage.get("stop_reason") == "max_tokens")
     return {
       "judge_version": args.judge_version, "prompt_version": PROMPT_VERSION, "taxonomy_version": tax.version, "condition": args.cond,
       "harness": args.harness, "screen_labels": args.screen_labels, "context": args.context, "context_have": context_have, "topk": args.topk,
+      "task_version": args.task_version, "extra_file": args.extra_file, "extra_keys": sorted(extra), "task_commit": (meta.raw or {}).get("_commit"), "thought_chars": args.thought_chars,
       "thinking": args.thinking, "effort": args.effort, "reasoning_effort": args.reasoning_effort,
       "source": traj.source, "package": traj.package, "agent": traj.agent, "domain": traj.domain,
       "task_id": traj.task_id, "n_steps": traj.n_steps, "n_images": bundle.n_images, "text_chars": text_chars,

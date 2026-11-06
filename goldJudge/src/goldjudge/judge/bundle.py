@@ -43,6 +43,7 @@ class BundleConfig:
   # "legacy": step_<t>.png labelled "before step t" (how every run up to 2026-11-05 was built). "after": the same image
   # labelled as the screen after step t and placed after that step's text, which is what OSWorld actually saved.
   screen_labels: str = "legacy"
+  show_reflection: bool = False  # Gemini logs a per-step reflection that older runs never showed
 
 
 @dataclass
@@ -78,7 +79,7 @@ def render_task(meta: TaskMeta, osw: OSWorldMeta, cfg: BundleConfig, *, eval_log
   ]
   if cfg.include_eval_source:
     for fn in osw.evaluator_funcs(meta):
-      src = osw.metric_source(fn)
+      src = osw.metric_source(fn, (meta.raw or {}).get("_commit"))
       if src:
         lines += [f"", f"### source of metric `{fn}` (truncated)", "```python", _trunc(src, cfg.eval_source_chars), "```"]
   if cfg.include_eval_log and eval_log:
@@ -145,6 +146,9 @@ def agent_trajectory_parts(traj: Trajectory, cfg: BundleConfig) -> tuple[list[di
   if cfg.on_demand:
     parts.append(_txt(_on_demand_note(included, traj.n_steps, "agent")))
   after = cfg.screen_labels == "after"
+  if after and traj.steps and traj.steps[0].screen_before and image_path_ok(traj.steps[0].screen_before):
+    parts.append(_txt("(initial screen, before step 1)"))  # Qwen runs log step_0
+    parts.append(_img(traj.steps[0].screen_before, cfg.image_max_width))
   for s in traj.steps:
     if s.step in included and not after:
       parts.append(_txt(f"(screenshot before step {s.step})"))
@@ -154,6 +158,8 @@ def agent_trajectory_parts(traj: Trajectory, cfg: BundleConfig) -> tuple[list[di
       block.append(f"thought: {_trunc(s.thought, cfg.thought_chars)}")
     if s.intent and s.intent != s.thought:
       block.append(f"intent: {_trunc(s.intent, 200)}")
+    if cfg.show_reflection and s.reflection:
+      block.append(f"reflection: {_trunc(s.reflection, cfg.thought_chars)}")
     ma = s.model_action
     if ma and ma.coordinate:
       block.append(f"model action: {ma.type} at {ma.coordinate} (model coordinate space {traj.model_coord_space})")

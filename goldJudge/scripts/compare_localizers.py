@@ -67,6 +67,7 @@ def main() -> None:
   ap.add_argument("--ref", required=True)
   ap.add_argument("--index", default=str(ROOT / "data/index"))
   ap.add_argument("--out", default=str(ROOT / "data/metrics/compare"))
+  ap.add_argument("--shared", action="store_true", help="score only trajectories every predictor covers")
   args = ap.parse_args()
   lab = pd.read_parquet(Path(args.index) / "episodes.parquet")
   lab = lab[(lab.source == "cuadebug") & lab.root_error_step.notna()].set_index(["agent", "task_id"])
@@ -76,6 +77,15 @@ def main() -> None:
   split = pd.Series(["dev" if k in dev else "test" for k in keys], index=lab.index)
   specs = [args.ref] + [s for s in args.specs if s != args.ref]
   hits, rows, per = {}, [], []
+  if args.shared:  # restrict to the intersection of every predictor's coverage
+    have = pd.Series(True, index=lab.index)
+    for s in specs:
+      if not s.startswith("const:"):
+        d = load_pred(s)
+        have &= pd.Series([k in d for k in keys], index=lab.index)
+    lab, keys = lab[have], [k for k, h in zip(keys, have) if h]
+    gold = lab.root_error_step.astype(float)
+    split = split[have]
   for s in specs:
     if s.startswith("const:"):
       k = float(s.split(":")[1])

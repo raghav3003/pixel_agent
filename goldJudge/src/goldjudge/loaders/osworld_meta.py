@@ -72,9 +72,29 @@ class OSWorldMeta:
       grouped_action=grouped,
     )
 
-  def load_task(self, domain: str, task_id: str, *, with_human: bool = True) -> TaskMeta:
+  # -- task versions -------------------------------------------------------
+  # Tasks were edited after the agents ran (instructions and evaluators). ``commit`` pins a task (and the metric
+  # sources) to the OSWorld commit in effect when a trajectory was recorded; None = the checked-out version.
+  @lru_cache(maxsize=None)
+  def commit_at(self, date: str) -> str | None:
+    """Last OSWorld commit on or before ``date`` (YYYY-MM-DD), from the checkout's git history."""
+    import subprocess
+
+    out = subprocess.run(["git", "-C", str(self.osworld), "rev-list", "-1", f"--before={date} 23:59:59", "HEAD"],
+                         capture_output=True, text=True)
+    return out.stdout.strip() or None
+
+  @lru_cache(maxsize=4096)
+  def _git_text(self, commit: str, rel: str) -> str | None:
+    import subprocess
+
+    out = subprocess.run(["git", "-C", str(self.osworld), "show", f"{commit}:{rel}"], capture_output=True, text=True)
+    return out.stdout if out.returncode == 0 else None
+
+  def load_task(self, domain: str, task_id: str, *, with_human: bool = True, commit: str | None = None) -> TaskMeta:
     p = self.task_path(domain, task_id)
-    data = json.loads(p.read_text(encoding="utf-8"))
+    text = self._git_text(commit, str(p.relative_to(self.osworld))) if commit else None
+    data = json.loads(text if text is not None else p.read_text(encoding="utf-8"))
     return TaskMeta(
       task_id=task_id,
       domain=domain,
@@ -85,18 +105,20 @@ class OSWorldMeta:
       infeasible=task_id in self.infeasible_ids
       or str((data.get("evaluator") or {}).get("func", "")) == "infeasible",
       human=self.load_human(domain, task_id) if with_human else None,
-      raw=data,
+      raw={**data, "_commit": commit if text is not None else None},
     )
 
   # -- evaluator source ----------------------------------------------------
   @lru_cache(maxsize=None)
-  def metric_source(self, func_name: str) -> str | None:
-    """Return the Python source of an evaluator metric function, if found."""
+  def metric_source(self, func_name: str, commit: str | None = None) -> str | None:
+    """Return the Python source of an evaluator metric function, if found (at ``commit`` when given)."""
     import ast
 
     mdir = self.osworld / "desktop_env" / "evaluators" / "metrics"
     for py in sorted(mdir.glob("*.py")):
-      src = py.read_text(encoding="utf-8", errors="replace")
+      src = self._git_text(commit, str(py.relative_to(self.osworld))) if commit else None
+      if src is None:
+        src = py.read_text(encoding="utf-8", errors="replace")
       if f"def {func_name}(" not in src:
         continue
       tree = ast.parse(src)

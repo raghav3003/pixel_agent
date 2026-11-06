@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from goldjudge.schema import ActionType
 
@@ -97,3 +98,16 @@ def attach_before_after(steps: list, shots: dict[int, str]) -> None:
   for s in steps:
     s.screen_after = shots.get(s.step, "")
     s.screen_before = shots.get(s.step - 1, "")
+
+
+_TS_DATE_RE = re.compile(r"(20\d{2})(\d{2})(\d{2})")
+
+
+def run_date(traj) -> str | None:
+  """YYYY-MM-DD the trajectory was recorded, from its first step timestamp or screenshot file name."""
+  for s in traj.steps[:3]:
+    for src in (s.timestamp, s.screen_after, s.screenshot_path):
+      m = _TS_DATE_RE.search(Path(str(src)).name if src else "")
+      if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+  return None

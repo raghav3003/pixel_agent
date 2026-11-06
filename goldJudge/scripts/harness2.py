@@ -231,7 +231,7 @@ def score(args: argparse.Namespace) -> None:
     # idea 3: threshold on training folds, fallback = top5 judge root
     if pre:
       bt, bacc = 50, -1
-      for theta in range(0, 101, 5):
+      for theta in list(range(0, 101, 5)) + [101]:  # 101 = never override the fallback
         hits = [abs(H.decode_prefix(pre[key[i]]["windows"], theta, (topk.get(key[i]) or {}).get("root")) - df.g[i]) <= 2
                 for i in tr.index if key[i] in pre and (topk.get(key[i]) or {}).get("root") is not None]
         acc = np.mean(hits) if hits else 0

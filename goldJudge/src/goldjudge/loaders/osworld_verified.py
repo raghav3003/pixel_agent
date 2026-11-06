@@ -85,9 +85,9 @@ def _parse_generic(row: dict[str, Any]) -> tuple[str, str, str, ModelAction | No
 
 def _screenshot_map(task_dir: Path) -> dict[int, str]:
   out: dict[int, str] = {}
-  for p in task_dir.glob("step_*.png"):
+  for p in sorted(task_dir.glob("step_*.png")):  # several files per step (merged Claude rows): keep the last
     idx = step_index_from_png(p.name)
-    if idx is not None and idx not in out:
+    if idx is not None:
       out[idx] = str(p)
   return out
 
